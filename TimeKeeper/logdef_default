@@ -1,0 +1,86 @@
+# vim: filetype=perl
+
+# These are the names of alternative logs.
+# One of these values can be passed as $AltLogId when calling this file.
+# $AltLogId may be left undefined in which case a default log is created.
+my $AL_Timeline     = "Generate Timeline Log";
+my $AL_Timeline_csv = "Generate Timeline CSV";
+@AltLogs = ( $AL_Timeline, $AL_Timeline_csv );
+
+
+# Calculate global data
+my @DiscardTimers = grep {
+		my $type = get_timer_current_group_type $_;
+		$type == 1 || $type == 2;
+	} (0..get_num_timers);
+my $get_isworktime = sub { my $timer = shift; get_timer_current_group_type($timer) == 0 };
+my $get_isvacation = sub { my $timer = shift; get_timer_current_group_type($timer) == 3 };
+
+my $now = get_timestamp;
+my $year = (localtime $now)[5] + 1900;
+my $woy = get_week($now);
+
+# Generate a default timeline. For more options, see top of Timeline.pm.
+sub get_timer_info
+{
+	my ($timer) = @_;
+	my $name = get_timer_current_description($timer) || "Timer $timer";
+	return ( $name );
+}
+
+my $log = "This is an example log definition ($AltLogId).\n\n";
+
+if ($AltLogId eq $AL_Timeline)
+{
+	$log .= "Time sheet for week $year-$woy:\n";
+
+	my $timeline = timeline_nice -discard => \@DiscardTimers;
+	$log .= format_timeline $timeline, \&get_timer_info;
+	$log .= "---------------------------------------------\n";
+	my $totals = timeline_totals $timeline;
+	$log .= format_timeline_totals $totals, \&get_timer_info;
+
+	$log .= "\n\n";
+}
+elsif ($AltLogId eq $AL_Timeline_csv)
+{
+	sub format_timeline_event
+	{
+		my ($event,
+			$start_ts, $start_datetime, $start_date, $start_time,
+			$end_ts, $end_datetime, $end_date, $end_time,
+			$duration,
+			$description) = @_;
+
+		my $timer = $$event[2];
+		$timer = get_timer_current_group_name($timer) || "Default Group";
+		my @fields = ($timer, $description, $start_datetime,
+			$end_datetime);
+		return join ";", map { s/"/""g/; qq("$_") } @fields;
+	}
+	$log .= "\n";
+	my $timeline = timeline_nice -discard => \@DiscardTimers;
+	$log .= format_timeline $timeline, \&get_timer_info, \&format_timeline_event;
+}
+else
+{
+	$log .= "Time sheet for week $year-$woy:\n";
+
+	# Render the tasks, groups and week lines
+	$log .= format_log_timers "Task '<description>': <time>";
+	$log .= "---------------------------------------------\n";
+	$log .= format_log_groups_2 "<description>: <time>", $get_isworktime;
+	$log .= format_log_total "Entire week: <time>", $get_isworktime;
+
+	$log .= "\n\n";
+}
+
+# Do some sanity checks
+$log .= report_log_missing_groups
+	"ERROR: Task <timer> has time, but no group.";
+$log .= report_log_missing_descriptions
+	"WARNING: Task <timer> has time, but no name.";
+
+# return this value
+$log;
+
