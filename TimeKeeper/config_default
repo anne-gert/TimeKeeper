@@ -1,0 +1,80 @@
+# vim: ft=perl
+
+# Number of timers to display in the window. Additionally, there is a 0-th
+# timer that is always present.
+$NumTimers = 10;
+
+# Command to execute when a (temporary) file should be edited (or viewed).
+# This is uses as a 'printf' template. The first argument is the filename to
+# edit.
+# Use 'stdout' to just print the contents to stdout.
+# Use undef for a automatically determined value like:
+# - EDITOR environment variable
+# - Windows: 'notepad "%s"'
+# - Otherwise: 'gvim "%s"'
+$CmdEdit = undef;
+
+# Filename of the configuration file with transient, program-defined settings.
+# This filename can be an absolute path or relative to this config file.
+$StatusFileName = 'status';
+# Filename of the definition file for log generation.
+# This filename can be an absolute path or relative to this config file.
+$LogDefFileName = 'logdef';
+# Filename of the data file (Storage) with generated events.
+# This filename can be an absolute path or relative to this config file.
+$DataFileName = 'events';
+# Filename of the backup the data file (safe-keeping if data file gets lost or
+# unreachable).
+# This filename can be an absolute path or relative to this config file.
+# Use undef for none.
+$BackupDataFileName = undef;
+# Filename of the definition of the groups.
+# This filename can be an absolute path or relative to this config file.
+$GroupsFileName = 'groups';
+
+# If the program detects a suspend (long period without 1sec ticks), and if
+# $PauseOnSuspend==true, the running timer is paused at the last tick and
+# resumed at the current tick.
+# If this setting is false, the timer keeps running.
+$PauseOnSuspend = 1;
+# If the program is exited and $PauseOnExit==true, the running timer is paused.
+# If this setting is false, the timer keeps running.
+$PauseOnExit = 1;
+# If the program starts, this setting specifies which timer should be activated
+# (if defined) or keep the previous running status (if undefined).
+$ActivateOnStartup = 0;
+
+# Filename to write the debug info messages to, set to undef for STDOUT.
+$DebugInfoFileName = undef;
+# Number of seconds to keep the debug info messages in the log-file.
+$KeepDebugInfoPeriod = 7*24*60*60;
+
+# When defined, description prefixes that occur for different timers are
+# replaced by this string in the window title when the timer is active.
+# When undef, the entire description is displayed.
+$TitleReplaceCommonPrefix = '';
+
+# When set non-empty, this font is set as the MainWindows default font.
+# Windows 7 uses a font that is a little bit larger than Windows XP, so this
+# difference can be overridden.
+# Default fonts are:
+# - Windows XP: 'Tahoma 8'
+# - Windows 7: '{Segoe UI} 9'
+# - Funny: '{Comic Sans MS} 9', '{Courier New} 9'
+$DefaultFont = '';
+
+# External Tools to display in the main menu's Tools submenu.
+# Each entry should be on a line like this:
+# 	DisplayText :: Command
+# With:
+# - DisplayText: Text to display in the menu entry.
+# - Command: Command to execute when the menu entry is activated.
+# Tips:
+# * A DOS command can be run like this:
+# start %COMSPEC% /c "dir & pause"     Execute multiple commands
+# start %COMSPEC% /c "doit || pause"   Execute doit and pause if errors
+# * If an entry is just '---', a separator is inserted
+$ExtTools = '
+';
+
+
