@@ -772,7 +772,7 @@ sub default_get_timer_info
 
 # Returns a string with the contents of the timeline event nicely formatted.
 # Arguments:
-# 0 - $event: The timeline event itself
+# 0 - $event: The timeline event itself, undef if non-allocated
 # 1 - $start_ts: Start as timestamp
 # 2 - $start_datetime: Start in human readable format
 # 3 - $start_date: Start date in human readable format
@@ -795,14 +795,21 @@ sub default_format_timeline_event
 
 	# Assume the start and end will generally be on the same date. If so,
 	# display it a bit more concise.
-	if ($start_date && $end_date && $start_date eq $end_date)
+	if (!defined $event)
 	{
+		# This is a 'gap' in the timeline, don't render it.
+		return $description;
+	}
+	elsif ($start_date && $end_date && $start_date eq $end_date)
+	{
+		# This is an event on a single day.
 		return sprintf "%10s %5s-%5s %7s %s",
 			$start_date, $start_time, $end_time,
 			"($duration)", $description;
 	}
 	else
 	{
+		# This is an event over more than one day.
 		return sprintf "%16s-%16s %7s %s",
 			$start_datetime, $end_datetime,
 			"($duration)", $description;
@@ -846,6 +853,42 @@ sub default_format_timeline_grand_total
 	return sprintf "Grand total: $grand_total";
 }
 
+# Wrapper function to call format_timeline_event().
+sub call_format_timeline_event
+{
+	my ($func, $start_ts, $end_ts, $description, $event) = @_;
+
+	my $duration = format_time_hm($end_ts - $start_ts);
+	$duration = "-" unless $duration;
+	my $start_datetime = format_datetime_hm($start_ts);
+	my $end_datetime = format_datetime_hm($end_ts, 1);
+
+	# Assume the start and end will generally be on the same date.
+	# If so, display it a bit more concise.
+	my ($start_date, $start_time) = $start_datetime =~ /(\S+)\s+(\S+)/;
+	my ($end_date, $end_time) = $end_datetime =~ /(\S+)\s+(\S+)/;
+
+	if (!$event && $description eq "")
+	{
+		# This is a gap and there is no description yet.
+		if ($start_date ne $end_date)
+		{
+			$description = "<next day>";
+		}
+		else
+		{
+			$description = "<gap: $duration>";
+		}
+	}
+
+	my $s = &$func($event,
+		$start_ts, $start_datetime, $start_date, $start_time,
+		$end_ts, $end_datetime, $end_date, $end_time,
+		$duration, $description);
+	$s .= "\n" if $s ne "";  # add linebreak if not empty
+	return $s;
+}
+
 # Returns a string with the contents of the timeline nicely formatted.
 # The arguments are as follows:
 # - $timeline: array with timeline events. An event is an array with the
@@ -864,25 +907,24 @@ sub format_timeline
 	$format_timeline_event ||= \&default_format_timeline_event;
 
 	my $s = "";
+	my $prev_end_ts;
 	foreach my $event (@$timeline)
 	{
 		my ($start_ts, $end_ts, $timer) = @$event;
-		my $duration = format_time_hm($end_ts - $start_ts);
-		$duration = "-" unless $duration;
-		my $start_datetime = format_datetime_hm($start_ts);
-		my $end_datetime = format_datetime_hm($end_ts, 1);
+
+		if (defined $prev_end_ts && $prev_end_ts != $start_ts)
+		{
+			# There is a gap, render that
+			$s .= call_format_timeline_event $format_timeline_event,
+				$prev_end_ts, $start_ts, undef, undef;
+		}
+
 		my ($name) = &$get_timer_info($timer);
 
-		# Assume the start and end will generally be on the same date.
-		# If so, display it a bit more concise.
-		my ($start_date, $start_time) = $start_datetime =~ /(\S+)\s+(\S+)/;
-		my ($end_date, $end_time) = $end_datetime =~ /(\S+)\s+(\S+)/;
+		$s .= call_format_timeline_event $format_timeline_event,
+			$start_ts, $end_ts, $name, $event;
 
-		$s .= &$format_timeline_event($event,
-			$start_ts, $start_datetime, $start_date, $start_time,
-			$end_ts, $end_datetime, $end_date, $end_time,
-			$duration, $name);
-		$s .= "\n";
+		$prev_end_ts = $end_ts;
 	}
 	return $s;
 }

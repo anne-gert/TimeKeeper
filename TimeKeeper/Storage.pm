@@ -1029,6 +1029,7 @@ sub get_timer_current_group_type
 # Go through all events and gather all groups that are in use.
 # If a group occurs multiple times, it is only returned once.
 # Groups are returned in case-insensitive aphanumerical order.
+# Note that these groups don't contain a color field.
 sub get_used_timer_groups
 {
 	my %groups;
