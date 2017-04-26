@@ -152,12 +152,11 @@ sub SetTimerGroup
 	my $self = shift;
 	my ($timer, $groupname, $groupcolor) = @_;
 
+	my ($fg, $bg) = $self->GetTimerGroupColoring($groupname, $groupcolor);
 	$groupname = "" unless defined $groupname;
-	$groupcolor = $self->{ColorWindowBackground} unless $groupcolor ne "";
-	my $grouptextcolor = $self->GetTextColorForBackground($groupcolor);
 
 	${$self->{Timers}[$timer]{groupname}} = $groupname;
-	$self->{Timers}[$timer]{labelctrl}->configure(-background => $groupcolor, -foreground => $grouptextcolor);
+	$self->{Timers}[$timer]{labelctrl}->configure(-background => $bg, -foreground => $fg);
 }
 
 # Set the time displayed in the specified timer.
@@ -666,11 +665,8 @@ sub CreateTimer
 	if ($group)
 	{
 		my $groupcolor = $$group{color};
-		if ($groupcolor)
-		{
-			my $grouptextcolor = $self->GetTextColorForBackground($groupcolor);
-			$label->configure(-background => $groupcolor, -foreground => $grouptextcolor);
-		}
+		my ($fg, $bg) = $self->GetTimerGroupColoring($groupname, $groupcolor);
+		$label->configure(-background => $bg, -foreground => $fg);
 		#info "Create Timer $timer_id with group $groupname and color $groupcolor\n";
 	}
 	my $popupGroupsMenu = sub {
@@ -684,11 +680,9 @@ sub CreateTimer
 			{
 				my $name = $$group{name};
 				$menu->add_radiobutton(-label => $name, -variable => \$groupname, -value => $name, -command => [ \&EvtSetTimerGroup, $timer_id, $name ]);
-				if (my $color = $$group{color})
-				{
-					my $textcolor = $self->GetTextColorForBackground($color);
-					$menu->entryconfigure("last", -background => $color, -foreground => $textcolor, -selectcolor => $textcolor);
-				}
+				my $color = $$group{color};
+				my ($fg, $bg) = $self->GetTimerGroupColoring($name, $color);
+				$menu->entryconfigure("last", -background => $bg, -foreground => $fg, -selectcolor => $fg);
 			}
 			$menu->add_separator;
 		}

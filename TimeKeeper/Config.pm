@@ -67,7 +67,7 @@ BEGIN
 our $ConfigFileName = 'config';
 
 # The configuration variables.
-# See config_default for the meaning and defaults.
+# See config_default for a description and the defaults.
 
 our $NumTimers;
 our $CmdEdit;
@@ -142,18 +142,30 @@ sub get_config_file_default
 
 sub read_config_file
 {
-	my $fname = get_config_file;
-	unless (-e $fname)
-	{
-		# Copy default config file
-		copy_file get_config_file_default, $fname;
-	}
-
-	# Read the storage as a perl fragment
-	my $result = do $fname;
+	# First read the default file for new settings
+	my $default_fname = get_config_file_default;
+	# Read the default config as a perl fragment
+	my $result = do $default_fname;
 	if (!defined($result) && ($! || $@))
 	{
-		die "Cannot read config file '$fname': $!$@";
+		die "Cannot read config file '$default_fname': $!$@";
+	}
+
+	# Process the specified settings in the config file
+	my $fname = get_config_file;
+	if (-e $fname)
+	{
+		# Config file exists, read it as a perl fragment
+		my $result = do $fname;
+		if (!defined($result) && ($! || $@))
+		{
+			die "Cannot read config file '$fname': $!$@";
+		}
+	}
+	else
+	{
+		# Config does not exist, copy default config file
+		copy_file $default_fname, $fname;
 	}
 }
 

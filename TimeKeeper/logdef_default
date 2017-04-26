@@ -52,6 +52,8 @@ elsif ($AltLogId eq $AL_Timeline_csv)
 			$duration,
 			$description) = @_;
 
+		return "" unless $event;  # skip gaps
+
 		my $timer = $$event[2];
 		$timer = get_timer_current_group_name($timer) || "Default Group";
 		my @fields = ($timer, $description, $start_datetime,

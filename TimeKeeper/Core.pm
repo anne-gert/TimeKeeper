@@ -179,7 +179,8 @@ sub update_timers
 				my $name = get_timer_current_group_name $timer;
 				my $group = get_timer_group_info $name;
 				my $color = $$group{color};
-				&$cb_update_timer_group($timer, $name, $color);
+				&$cb_update_timer_group($timer, $name, $color)
+					if $cb_update_timer_group;
 			}
 		}
 		$report .= ")";
@@ -497,19 +498,63 @@ sub get_timer_group_infos
 		# File has changed, re-read it
 		my $groups1 = read_timer_groups;
 		my $groups2 = get_used_timer_groups;
-		# Store in cache variables
+		# Store in cache variables and remember which group have changed
+		my $old_timer_groups_by_name = $_timer_groups_by_name;
+		my %changed_groups = ();
 		$_timer_groups = [];
 		$_timer_groups_mtime = $mtime;
 		$_timer_groups_by_name = {};
 		foreach my $group (@$groups1, @$groups2)
 		{
+			# Iterate through all the groups that are defined
+			# and/or used.
+			# NB: All groups that are displayed in the timers are
+			# used groups and are thus included in this iteration.
 			my $name = $$group{name};
 			next if exists $$_timer_groups_by_name{$name};
 
 			push @$_timer_groups, $group;
 			$$_timer_groups_by_name{$name} = $group;
+
+			# Check if it changed
+			my $old_group = $$old_timer_groups_by_name{$name};
+			if (!defined $old_group ||  # it's a new group
+				# the name is the same because we selected that key
+				$$group{type} ne $$old_group{type} ||
+				# if the defined-ness changed, the group was
+				# moved in or out of the groups file.
+				defined($$group{color}) != defined($$old_group{color}) ||
+				$$group{color} ne $$old_group{color})
+			{
+				# This group's definition has changed.
+				$changed_groups{$name} = $group;
+			}
 		}
 		#use Data::Dumper; info Dumper $_timer_groups; info Dumper $_timer_groups_by_name;
+
+		# Go through the timers and update the ones that refer to a changed
+		# group.
+		info "Changed groups: @{[sort keys %changed_groups]}\n";
+		foreach my $timer (0..get_num_timers)
+		{
+			my $name = get_timer_current_group_name $timer;
+			if (exists $changed_groups{$name})
+			{
+				my $color;
+				if (my $group = $changed_groups{$name})
+				{
+					info "Group '$name' has changed\n";
+					$color = $$group{color};
+				}
+				else
+				{
+					info "Group '$name' has been removed\n";
+					$color = undef;
+				}
+				&$cb_update_timer_group($timer, $name, $color)
+					if $cb_update_timer_group;
+			}
+		}
 	}
 	return $_timer_groups;
 }
@@ -563,6 +608,22 @@ sub set_timer_group_name
 	}
 }
 
+# Check if the groups have changed and redraw the timer groups, that have
+# changed, on the main window.
+sub reevaluate_timer_groups
+{
+	my ($force) = @_;
+
+	if ($force)
+	{
+		# Force re-read of timer groups
+		undef $_timer_groups_mtime;
+	}
+
+	# (Re-)check the timer groups
+	get_timer_group_infos;  # update cache
+}
+
 
 ##############################################################################
 ### Time related functions
@@ -607,6 +668,12 @@ sub time_tick
 		show_timer $active_timer;
 
 		$LastTime = $time;
+	}
+
+	if (($time % 60) == 0)
+	{
+		# Check if the timer-group file has changed.
+		reevaluate_timer_groups;
 	}
 
 	# Check if there are changes in descriptions that should be added

@@ -477,6 +477,54 @@ sub AddOption
 	confess "Abstract method called";
 }
 
+# Return an array with (foreground color, background color) to use for a
+# timer group for a certain $groupcolor. This groupcolor can be:
+# - #rrggbb: Take this a background and find a suitable foreground.
+# - empty: Use the standard window background and foreground color.
+# - undef: Use the standard window background, but use a distinctive
+#     foreground color if a timer group is specified.
+# Returns fore- and background color as #rrggbb.
+sub GetTimerGroupColoring
+{
+	my $self = shift;
+	my ($groupname, $groupcolor) = @_;
+
+	my ($fg, $bg);
+	if ($groupcolor)
+	{
+		# A color is defined, use that as background
+		$bg = $groupcolor;
+		$fg = $self->GetTextColorForBackground($bg);
+	}
+	elsif ($groupname)
+	{
+		# There is no background color given.
+		# Use default background
+		$bg = $self->{ColorWindowBackground};
+		if (defined $groupcolor)
+		{
+			# The background color is defined, so explicitly
+			# empty. Use the normal foreground color.
+			$fg = $self->GetTextColorForBackground($bg);
+		}
+		else
+		{
+			# The background color is undefined, use a
+			# signal color to indicate that this group is
+			# not defined in the TimerGroups file.
+			$fg = "darkorange3";
+		}
+	}
+	else
+	{
+		# No color and no group, use default colors.
+		$bg = $self->{ColorWindowBackground};
+		$fg = $self->GetTextColorForBackground($bg);
+	}
+
+	return ($fg, $bg);
+}
+
 # Determine the text color to use on the specified background color to be
 # readable.
 # The input and output colors are colors acceptable by the underlying plugin.
@@ -490,25 +538,31 @@ sub GetTextColorForBackground
 	# I did some testing and for the primary colors, I found that the
 	# following values are the minimal values where black textcolor should
 	# be used:
-	# - Red: #D00000 -> 208, 0, 0
-	# - Green: #006000 -> 0, 96, 0
-	# - Blue: #3030FF -> 48, 48, 255
+	# - Red: #D00000 -> 208, 0, 0 -> 0.816, 0, 0
+	# - Green: #006000 -> 0, 96, 0 -> 0, 0.376, 0
+	# - Blue: #3030FF -> 48, 48, 255 -> 0.188, 0.188, 1
 	# Equate each of these to the 'magical' intensity I and it follows
-	# that using weights of 5:10:1 yields the following values for I:
-	#   208*5 +  0*10 +   0*1 = 1040
-	#     0*5 + 96*10 +   0*1 =  960
-	#    48*5 + 48*10 + 255*1 =  975
+	# that using weights of 299:587:114 yields the following values for I:
+	#   sqrt(0.816^2*0.299 +     0^2*0.587 + 0^2*0.114) = 0.446
+	#   sqrt(    0^2*0.299 + 0.376^2*0.587 + 0^2*0.114) = 0.288
+	#   sqrt(0.188^2*0.299 + 0.188^2*0.587 + 1^2*0.114) = 0.381
 	#
 	# The conclusion is that the weights look reasonable and that the
-	# minimum intensity to use black text color is about 1000. Below that
+	# minimum intensity to use black text color is about 0.4. Below that
 	# we should use white text color.
-	# NB: Scaling 1000 to a 0..1 range gives 1000/255 = 4.
+	#
+	# Some extra information is on http://stackoverflow.com/questions/596216/formula-to-determine-brightness-of-rgb-color,
+	# where it is stated that there are 2 formulas:
+	# - Luminance (standard for certain colour spaces): (0.2126*R + 0.7152*G + 0.0722*B)
+	# - Luminance (perceived option 1): (0.299*R + 0.587*G + 0.114*B)
+	# - Luminance (perceived option 2, slower to calculate): sqrt( 0.299*R^2 + 0.587*G^2 + 0.114*B^2 )
+	# Others state one should just take the maximum
 
 	# Get the perceived intensity.
 	my $intensity = $self->GetWeightedIntensity($bgcolor);
 	#info "Color '$bgcolor': Intensity $intensity\n";
 
-	if ($intensity > 4)
+	if ($intensity > 0.4)
 	{
 		return "black";
 	}
@@ -522,7 +576,8 @@ sub GetTextColorForBackground
 # $color is any color accepted by the underlying plugin.
 # Explanation:
 # The human eye is not equally sensitive to all color components. The weights
-# are about r:g:b = 5:10:1.
+# are about r:g:b = 0.299 : 0.587 : 0.114
+# Returns a value in 0..1 range.
 sub GetWeightedIntensity
 {
 	my $self = shift;
@@ -530,7 +585,7 @@ sub GetWeightedIntensity
 
 	my ($r, $g, $b) = $self->GetRgb($color);
 	#info "Color '$color': Components($r, $g, $b)\n";
-	return 5*$r + 10*$g + 1*$b;
+	return sqrt(0.299*$r**2 + 0.587*$g**2 + 0.114*$b**2);
 }
 
 # Return the platform-specific RGB components of the specified color.
