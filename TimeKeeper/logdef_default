@@ -1,5 +1,9 @@
 # vim: filetype=perl
 
+use strict;
+use warnings;
+use vars qw/@AltLogs $AltLogId/;  # arguments from outside
+
 # These are the names of alternative logs.
 # One of these values can be passed as $AltLogId when calling this file.
 # $AltLogId may be left undefined in which case a default log is created.
