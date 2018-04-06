@@ -20,6 +20,8 @@ BEGIN
 
 	@ISA         = qw(Exporter);
 	@EXPORT      = qw(
+		progressive_round
+
 		format_log_timers
 		format_log_groups format_log_groups_2
 		format_log_total
@@ -29,6 +31,108 @@ BEGIN
 	);
 	@EXPORT_OK   = ();
 	%EXPORT_TAGS = ();  # eg: TAG => [ qw!name1 name2! ],
+}
+
+
+##############################################################################
+### Utility functions for logging
+
+# Rounds progressively from smallest value to largest value, distributing the
+# rounded value over the larger values.
+# Progressive rounding iterates through the values from the smallest to the
+# largest. The rounded value is corrected on the remaining values, distributing
+# proportional to the relative value (i.e. value with respect to total
+# remaining).
+# Arguments:
+# - $items: Reference to name-value hash for input as well as output. The values
+#    are integers.
+# - $round_to: Value that specifies to which multiples should be rounded.
+# Optional arguments (in "-option => value" syntax):
+# -round_up [default 0.5]: Specifies the fraction from where to round up.
+# -round_up_last [default -round_up]: Specifies the fraction from where to
+#    round up for the last (= biggest) value. This may be set differently,
+#    because this is where all of the value ends up.
+# -round_up_small [default 0.25]: Specifies the fraction from where to round
+#    up for small values. Small values are values less than 1, so that
+#    rounding down would make it 0.
+sub progressive_round
+{
+	my ($items, $round_to, %args) = @_;
+	my ($round_up, $round_up_last, $round_up_small) =
+		@args{qw/-round_up -round_up_last -round_up_small/};
+	$round_up = 0.5 unless defined $round_up;
+	$round_up_last = $round_up unless defined $round_up_last;
+	$round_up_small = 0.25 unless defined $round_up_small;
+
+	# Get the key names, ordered by value
+	my @names = sort {
+		$$items{$a} <=> $$items{$b}  # sort ascending by value
+	} keys %$items;
+
+	# Round the items, start with the smallest value.
+	for (my $i = 0; $i < @names; ++$i)
+	{
+		my $name = $names[$i];
+		my $value = $$items{$name};
+
+		# Calculate wholes/remainder wrt to $round_to
+		my $value_wholes = int($value / $round_to) * $round_to;
+		my $value_remainder = $value - $value_wholes;
+		my $value_frac = $value_remainder / $round_to;
+
+		# Determine the amount to round and adjust this item.
+		my $round_up_frac;
+		if ($i == @names - 1)
+		{
+			# This is the last item, apply special rules.
+			$round_up_frac = $round_up_last;
+		}
+		elsif ($value_wholes == 0)
+		{
+			# This item is small (between 0 and 1).
+			$round_up_frac = $round_up_small;
+		}
+		else
+		{
+			# Round this item to the nearest $round_to multiple
+			$round_up_frac = $round_up;
+		}
+
+		# Calculate the new value for this item
+		my $new_value = ($value_frac >= $round_up_frac)
+			? $value_wholes + $round_to  # round up
+			: $value_wholes;  # round down
+		$$items{$name} = $new_value;
+		my $round = $new_value - $value;  # amount to round
+		#print "DEBUG: Set '$name' $value -> $new_value (round=$round) (frac=$value_frac, round_up_frac=$round_up_frac)\n";
+
+		# Adjust the bigger items by distributing the rounded
+		# amount, depending on the item's relative size.
+		if ($round != 0)
+		{
+			# Calculate the total for the bigger items
+			my $total = 0;
+			for (my $j = $i + 1; $j < @names; ++$j)
+			{
+				my $name2 = $names[$j];
+				my $value2 = $$items{$name2};
+				$total += $value2;
+			}
+
+			# Adjust bigger items
+			for (my $j = $i + 1; $j < @names; ++$j)
+			{
+				my $name2 = $names[$j];
+				my $value2 = $$items{$name2};
+				my $rel_size = $value2 / $total;
+				# Add value, depending on its relative size
+				my $rel_round = -$round * $rel_size;
+				my $new_value = $value2 + $rel_round;
+				$$items{$name2} = $new_value;
+				#print "DEBUG: Adjust '$name2' $value2 -> $new_value (round=$rel_round)\n";
+			}
+		}
+	}
 }
 
 
