@@ -6,6 +6,11 @@ package TimeKeeper::Storage;
 
 use strict;
 use Carp;
+my $CanUseThreads;
+BEGIN
+{
+	$CanUseThreads = eval 'use threads; use Thread::Queue; 1';
+}
 
 use Fcntl qw(:flock SEEK_END SEEK_SET);
 
@@ -99,6 +104,18 @@ my @State = (
 my $Storage_appended = 0;  # number of events appended
 my $Storage_changed = 1;  # if true, entire state might have been changed
 my $Storage_ts = undef;  # timestamp van the last read storage file
+
+my $Backupper_thread = undef;  # if set, this is the backupper() thread.
+my $Backupper_queue = undef;  # if set, this is a message queue to backupper()
+END
+{
+	if ($Backupper_queue)
+	{
+		$Backupper_queue->enqueue("EXIT");
+		$Backupper_thread->join;
+	}
+	$Backupper_thread = $Backupper_queue = undef;
+}
 
 # Derived, 'running-total' states
 my @Descriptions;
@@ -399,31 +416,109 @@ sub rmw_storage_file
 		$Storage_ts = get_storage_file_mtime;
 	}
 
-	# Now, open the backup and write the data there too. If anything goes
-	# wrong with the backup, just ignore it.
-	my $bkfname = get_data_backup_file;
-	if ($bkfname ne "")
+	if ($modifier)
 	{
-		# Make sure the directory exists
-		mkfiledir $bkfname unless -e $bkfname;
-
-		(my $open_mode, my $seek_pos, $contents_update) =
-			get_open_mode $org_contents, $contents_update, $Storage_changed, $Storage_appended;
-
-		if ($open_mode)
+		# There are actual changes to the state, backup them too.
+		# If the backup fails, ignore that and try next time again.
+		my $bkfname = get_data_backup_file;
+		if ($bkfname ne "")
 		{
-			my $bkfh;
-			open($bkfh, $open_mode, $bkfname) &&
-			flock($bkfh, LOCK_EX) &&
-			seek($bkfh, 0, $seek_pos) &&
-			print($bkfh $contents_update) &&
-			flock($bkfh, LOCK_UN) &&
-			close($bkfh);
+			if ($CanUseThreads)
+			{
+				# Threads are available, use that, so that long
+				# timeouts are not a problem. This may happen
+				# if the backup file is on a share that is not
+				# available.
+				unless ($Backupper_queue)
+				{
+					$Backupper_queue = Thread::Queue->new;
+					$Backupper_thread = threads->create(\&backupper, $fname, $bkfname);
+				}
+				$Backupper_queue->enqueue("BACKUP");
+			}
+			else
+			{
+				# Just call directly
+				eval
+				{
+					copy_file $fname, $bkfname;
+				};
+				if ($@)
+				{
+					info "Backup thread: Could not backup events: $@";
+				}
+			}
 		}
 	}
 
 	# Changes updated, reset flags
 	$Storage_changed = $Storage_appended = 0;
+}
+
+# This function copies $fname to $backup_fname.
+# It runs on a separate thread and listens to the $Backuppper_queue, which
+# recognizes the following commands:
+# - BACKUP: Perform a backup. The thread may wait a little while to wait for
+#     more requests to perform them at once.
+# - EXIT: Stop the thread.
+sub backupper
+{
+	my ($fname, $backup_fname) = @_;
+
+	info "Backup thread: Started\n";
+	while (1)
+	{
+		# Read the commands until it is quiet for some time.
+		my $do_backup = 0;
+		my $do_exit = 0;
+		while (1)
+		{
+			if (defined(my $command = $Backupper_queue->dequeue_timed(30)))
+			{
+				# A command within 30 sec
+				info "Backup thread: Received '$command'\n";
+				if ($command eq "BACKUP")
+				{
+					$do_backup = 1;
+				}
+				elsif ($command eq "EXIT")
+				{
+					$do_exit = 1;
+					last;
+				}
+				else
+				{
+					info "Backup thread: Unknown command: '$command'\n";
+				}
+			}
+			else
+			{
+				# Quiet for 30 sec
+				#info "Backup thread: No command within 30 sec\n";
+				last;
+			}
+		}
+
+		# Execute what needs to be done
+		if ($do_backup)
+		{
+			eval
+			{
+				copy_file $fname, $backup_fname;
+				info "Backup thread: Backed up events\n";
+			};
+			if ($@)
+			{
+				info "Backup thread: Could not backup events: $@";
+			}
+		}
+		if ($do_exit)
+		{
+			info "Backup thread: Exiting\n";
+			last;
+		}
+	}
+	info "Backup thread: Ended\n";
 }
 
 # Read the storage file into @State.
