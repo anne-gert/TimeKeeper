@@ -928,7 +928,27 @@ sub UpdateTitle
 			local $_ = "$description\n$d";
 			# In this string with 2 descriptions, find the common
 			# prefix with a regex.
-			if (/^(.*\s)(.*\w.*)\n\1/i)
+			# The prefix should be followed by whitespace (to
+			# force prefixes to be whole words), possibly
+			# with punctuation. This punctuation and whitespace
+			# does not need to be matched by the other description
+			# exactly.
+			# o Just punctuation without whitespace is not enough
+			#   because "A/B: C" and "A: D" is not "B: C" and "D"
+			if (/^
+				(                # Capture 1: Prefix in current description
+					(.*)     # Capture 2: Prefix that is exactly matched
+					[\p{PUNCTUATION}]* # Any amount of punctuation
+					\s+      # Mandatory whitespace (to separate the word)
+				)
+				(.*\w.*)         # Capture 3: Rest of the description (non-empty)
+				\n
+				(                # Capture 4: Matched other prefix
+					\2       # Matched prefix
+					[\p{PUNCTUATION}]* # Any amount of punctuation
+					\s+      # Mandatory whitespace (to separate the word)
+				)
+				/ix)
 			{
 				# Both descriptions start with the same prefix
 				# and the prefix ends with a whitespace, so it
@@ -945,8 +965,29 @@ sub UpdateTitle
 		if ($longest_common_prefix > 0)
 		{
 			# Do the replacement
-			substr($description, 0, $longest_common_prefix) =
-				$prefix_replace;
+			if ($prefix_replace =~ m{^\s*s\{(.*)\}\{(.*)\}\s*$})
+			{
+				# This is a regex replacement
+				my ($re, $repl) = ($1, $2);
+				eval
+				{
+					# Construct 'prefix<TAB>tail'
+					substr($description, $longest_common_prefix, 0) = "\t";
+					# Execute regex (use same delimiter chars)
+					$description =~ s{$re}{eval qq("$repl")}e;
+				};
+				if ($@)
+				{
+					# Report error
+					info "ERROR: Prefix replacement error: $@";
+				}
+			}
+			else
+			{
+				# This is a simple string replacement.
+				substr($description, 0, $longest_common_prefix) =
+					$prefix_replace;
+			}
 		}
 	}
 
