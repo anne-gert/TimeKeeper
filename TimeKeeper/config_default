@@ -12,6 +12,7 @@ $NumTimers = 10;
 # - EDITOR environment variable
 # - Windows: 'notepad "%s"'
 # - Otherwise: 'gvim "%s"'
+# Tip: To have automatic line highlighting in gvim, use 'gvim -c "set cul" "%s"'
 $CmdEdit = undef;
 
 # Filename of the configuration file with transient, program-defined settings.
@@ -51,6 +52,13 @@ $KeepDebugInfoPeriod = 7*24*60*60;
 
 # When defined, description prefixes that occur for different timers are
 # replaced by this string in the window title when the timer is active.
+# When this value is of the form 's{...}{...}', this substitution is performed
+# on the string 'prefix<TAB>rest of description'.
+# Examples:
+# - 's{(.{1,3}).*?\t(.*)}{$1...$2}': Take first 3 chars of prefix, then "..."
+#     then the rest.
+# - 's{([\w-]{1,5}+).{3,}?\t(.*)}{$1...$2}': Take 1st word of prefix with max
+#     of 5 chars, then "..." (must replace at least 3 chars) then the rest.
 # When undef, the entire description is displayed.
 $TitleReplaceCommonPrefix = '';
 
@@ -70,10 +78,17 @@ $DefaultFont = '';
 # - DisplayText: Text to display in the menu entry.
 # - Command: Command to execute when the menu entry is activated.
 # Tips:
-# * A DOS command can be run like this:
-# start %COMSPEC% /c "dir & pause"     Execute multiple commands
-# start %COMSPEC% /c "doit || pause"   Execute doit and pause if errors
-# * If an entry is just '---', a separator is inserted
+# * A DOS command can be run with 'start %COMSPEC% /c ...'.
+# * If an entry is just '---', a separator is inserted.
+# * If an entry starts with a '#', it is ignored.
+# Example:
+# $ExtTools = '
+#     Show directory and pause  :: start %COMSPEC% /c "dir & pause"
+#     Backup and pause if error :: start %COMSPEC% /c "backup || pause"
+#     ---
+#     #This will not show
+#     Show website              :: start http://example.com
+# ';
 $ExtTools = '
 ';
 

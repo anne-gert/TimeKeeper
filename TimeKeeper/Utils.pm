@@ -230,7 +230,6 @@ sub copy_file
 {
 	my ($fname_from, $fname_to) = @_;
 
-	# Copy default groups to groups file
 	open my $fh_from, "< $fname_from" or die "Cannot open source file '$fname_from': $!";
 	mkfiledir $fname_to unless -e $fname_to;
 	open my $fh_to, "> $fname_to" or die "Cannot open destination file '$fname_to': $!";
