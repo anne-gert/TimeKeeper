@@ -60,6 +60,8 @@ BEGIN
 
 sub create_eventid { get_random 16 }
 
+my $StartUpTime = get_storage_timestamp();
+
 # This @State array contains all the entries in the storage_file. Each entry
 # is an array with the following elements:
 # - GMT timestamp: UNIX timestamp in UTC
@@ -87,19 +89,19 @@ sub create_eventid { get_random 16 }
 # The @State should be ordered by time (duplicate timestamps are allowed), so
 # that it can be processed from beginning to end to 'replay' the events.
 my @State = (
-	[ 0, 0, "D", "Rest time",             create_eventid ],
-	[ 0, 1, "D", "Lunch",                 create_eventid ],
-	[ 0, 2, "D", "General Meeting",       create_eventid ],
-	[ 0, 3, "D", "Project Meeting",       create_eventid ],
-	[ 0, 4, "D", "Implementation",        create_eventid ],
-	[ 0, 5, "D", "Writing webpage",       create_eventid ],
+	[ $StartUpTime, 0, "D", "Rest time",             create_eventid ],
+	[ $StartUpTime, 1, "D", "Lunch",                 create_eventid ],
+	[ $StartUpTime, 2, "D", "General Meeting",       create_eventid ],
+	[ $StartUpTime, 3, "D", "Project Meeting",       create_eventid ],
+	[ $StartUpTime, 4, "D", "Implementation",        create_eventid ],
+	[ $StartUpTime, 5, "D", "Writing webpage",       create_eventid ],
 
-	[ 0, 0, "G", "Other activities",   2, create_eventid ],
-	[ 0, 1, "G", "Own time",           1, create_eventid ],
-	[ 0, 2, "G", "General",            0, create_eventid ],
-	[ 0, 3, "G", "Project Strawberry", 0, create_eventid ],
-	[ 0, 4, "G", "Project Strawberry", 0, create_eventid ],
-	[ 0, 5, "G", "Project Strawberry", 0, create_eventid ],
+	[ $StartUpTime, 0, "G", "Other activities",   2, create_eventid ],
+	[ $StartUpTime, 1, "G", "Own time",           1, create_eventid ],
+	[ $StartUpTime, 2, "G", "General",            0, create_eventid ],
+	[ $StartUpTime, 3, "G", "Project Strawberry", 0, create_eventid ],
+	[ $StartUpTime, 4, "G", "Project Strawberry", 0, create_eventid ],
+	[ $StartUpTime, 5, "G", "Project Strawberry", 0, create_eventid ],
 );
 my $Storage_appended = 0;  # number of events appended
 my $Storage_changed = 1;  # if true, entire state might have been changed
@@ -143,7 +145,7 @@ sub get_storage_timestamp { return time; }  # Storage works with GMT timestamps
 
 # Throughout this module, different properties of the events are used.
 # %EventTraits is a global structure that stores these constant properties.
-# (Used in: state_cancellation)
+# (Used in: state_cleanup)
 my %EventTraits = (
 	G => create_event_trait(1, "g", 1),
 	D => create_event_trait(1, "d", 2),
@@ -628,33 +630,62 @@ sub state_delta
 # running_status is a substate of time, which means that run and pause are
 # really (relative) time events. It does also mean that if the time is set, its
 # substate also has to be explicitly set to not loose information.
-sub state_cancellation
+sub state_cleanup
 {
 	my ($state) = @_;
 
-	#info sprintf "state_cancellation(Size=%d)\n", scalar @$state;
+	#info sprintf "state_cleanup(Size=%d)\n", scalar @$state;
 	# Iterate from the back and maintain a data structure to determine if
-	# earlier events will be cancelled according to the rules.
+	# earlier events will be cancelled according to the rules before the
+	# cut-off window ("near past") starts.
 	# Non-cancelled events are copied to the new state.
+
+	my $event_keep_history_time = get_keep_event_history_days() * 24 * 60 *60;
+
 	my $new_state = [];
-	my @last_absolute_event;  # timer -> data_item -> bool
+	my @reset_before_window;  # timer -> data_item -> bool
+	my $keep_window_time = get_storage_timestamp() - $event_keep_history_time;
+	info "Delete events before $keep_window_time (=" . localtime($keep_window_time) . ")...\n";
 	foreach (reverse @$state)
 	{
-		my $item_cancelled = 0;
+		my $remove_item = 0;
 
 		my ($ts, $timer, $code) = @$_;
 		my $data_item = $EventTraits{$code}{data_item};
 		my $is_absolute = $EventTraits{$code}{is_absolute};
+		my $in_keep_window = $ts > $keep_window_time;
+		# NB: When $event_keep_history_time==0, the expectation is
+		# that no history is kept.
 
-		# Rule 1) Check if this event is cancelled by a later absolute
-		# event.
-		#use Data::Dumper; info "last_absolute_event: ", Dumper \@last_absolute_event;
-		my $last_absolute_event_timer = $last_absolute_event[$timer];
-		$item_cancelled = 1 if $last_absolute_event[$timer]{$data_item};
+		if ($in_keep_window)
+		{
+			# This event is in the near past window and should be
+			# kept always.
+			$remove_item = 0;
+		}
+		else
+		{
+			# This event is outside of the near past window. It
+			# should only be kept if there is an absolute event
+			# resetting it before the window starts.
+			if ($reset_before_window[$timer]{$data_item})
+			{
+				# This item's effect will be reset before the
+				# window starts. It can be removed.
+				$remove_item = 1;
+			}
+			elsif ($is_absolute)
+			{
+				# This is an absolute event and it is before
+				# the window starts.
+				$reset_before_window[$timer]{$data_item} = 1;
+				#info "ABSOLUTE EVENT BEFORE WINDOW: @$_\n";
+			}
+		}
 
 		# If the event is cancelled, don't copy it into the new array.
-		#info "EVENT @$_: data_item=$data_item, is_absolute=$is_absolute, item_cancelled=$item_cancelled\n";
-		if ($item_cancelled)
+		#info "EVENT @$_: data_item=$data_item, is_absolute=$is_absolute, remove_item=$remove_item\n";
+		if ($remove_item)
 		{
 			info "Remove event '@$_'\n";
 			$Storage_changed = 1;  # rewrite entire file
@@ -666,9 +697,6 @@ sub state_cancellation
 			# allocation issues), so I'll push now and reverse the
 			# result later.
 		}
-
-		# Maintain data structures.
-		$last_absolute_event[$timer]{$data_item} = 1 if $is_absolute;
 	}
 	# Update the argument
 	@$state = reverse @$new_state;
@@ -832,6 +860,7 @@ sub set_timer_time
 	#info "set_timer_time([@$timers],$time,$ts)\n";
 	$ts = get_storage_timestamp unless defined $ts;
 
+	# Add events to the Storage file
 	rmw_storage_file sub {
 		my $state = shift;
 		foreach my $t (@$timers)
@@ -839,9 +868,10 @@ sub set_timer_time
 			add_event $state, $ts, $t, "T", $time, create_eventid;
 			add_event $state, $ts, $t, ($Times_running[$t] ? "r" : "p");
 		}
-		state_cancellation $state;
+		state_cleanup $state;
 	};
 
+	# Update internal variables and UI
 	foreach my $t (@$timers)
 	{
 		$Times[$t] = $time;
@@ -857,12 +887,14 @@ sub set_timer_description
 	#info "set_timer_description($timer,$description,$ts)\n";
 	$ts = get_storage_timestamp unless defined $ts;
 
+	# Add events to the Storage file
 	rmw_storage_file sub {
 		my $state = shift;
 		add_event $state, $ts, $timer, "D", $description, create_eventid;
-		state_cancellation $state;
+		state_cleanup $state;
 	};
 
+	# Update internal variables and UI
 	$Descriptions[$timer] = $description;
 	mark_changed_timer $timer, "D";
 }
@@ -875,12 +907,14 @@ sub set_timer_group
 	#info "set_timer_group($timer,$group_name,$group_type,$ts)\n";
 	$ts = get_storage_timestamp unless defined $ts;
 
+	# Add events to the Storage file
 	rmw_storage_file sub {
 		my $state = shift;
 		add_event $state, $ts, $timer, "G", $group_name, $group_type, create_eventid;
-		state_cancellation $state;
+		state_cleanup $state;
 	};
 
+	# Update internal variables and UI
 	$GroupNames[$timer] = $group_name;
 	$GroupTypes[$timer] = $group_type;
 	mark_changed_timer $timer, "G";
@@ -901,11 +935,13 @@ sub inc_timer_time
 	#info "inc_timer_time($timer,$time,$ts)\n";
 	$ts = get_storage_timestamp unless defined $ts;
 
+	# Add events to the Storage file
 	rmw_storage_file sub {
 		my $state = shift;
 		add_event $state, $ts, $timer, "i", $time;
 	};
 
+	# Update internal variables and UI
 	$Times[$timer] += $time;
 	mark_changed_timer $timer, "T";
 
@@ -922,12 +958,14 @@ sub transfer_timer_time
 	#info "transfer_timer_time($timer,$time,$ts)\n";
 	$ts = get_storage_timestamp unless defined $ts;
 
+	# Add events to the Storage file
 	rmw_storage_file sub {
 		my $state = shift;
 		add_event $state, $ts, $timer_from, "i", -$time;
 		add_event $state, $ts, $timer_to, "i", $time;
 	};
 
+	# Update internal variables and UI
 	$Times[$timer_from] -= $time;
 	$Times[$timer_to] += $time;
 	mark_changed_timer $timer_from, "T";
@@ -945,6 +983,7 @@ sub timer_run
 	#info Carp::longmess "timer_run($timer,$ts)";
 	$ts = get_storage_timestamp unless defined $ts;
 
+	# Add events to the Storage file
 	rmw_storage_file sub {
 		my $state = shift;
 		# Start specified timer
@@ -953,7 +992,7 @@ sub timer_run
 			add_event $state, $ts, $timer, "r";
 			$Times_running[$timer] = 1;
 		}
-		state_cancellation $state;
+		state_cleanup $state;
 	};
 }
 
@@ -966,6 +1005,7 @@ sub timer_pause
 	#info Carp::longmess "timer_pause($timer.$ts)";
 	$ts = get_storage_timestamp unless defined $ts;
 
+	# Add events to the Storage file
 	rmw_storage_file sub {
 		my $state = shift;
 		# Stop specified timer
@@ -974,7 +1014,7 @@ sub timer_pause
 			add_event $state, $ts, $timer, "p";
 			$Times_running[$timer] = 0;
 		}
-		state_cancellation $state;
+		state_cleanup $state;
 	};
 
 	# This timer is stopped. Ensure it displays the correct state
@@ -989,6 +1029,7 @@ sub timer_pause_all
 	#info "timer_pause_all($ts)\n";
 	$ts = get_storage_timestamp unless defined $ts;
 
+	# Add events to the Storage file
 	my @timers = ();
 	rmw_storage_file sub {
 		my $state = shift;
@@ -1002,7 +1043,7 @@ sub timer_pause_all
 				push @timers, $idx;
 			}
 		}
-		state_cancellation $state;
+		state_cleanup $state;
 	};
 
 	# These timers are stopped. Ensure they display the correct state
@@ -1021,6 +1062,7 @@ sub timer_events
 	#info "timer_pauserun($timer1,$ts1,$timer2,$ts2)\n";
 	my $now = get_storage_timestamp;
 
+	# Add events to the Storage file
 	my @timers = ();
 	rmw_storage_file sub {
 		my $state = shift;
@@ -1053,7 +1095,7 @@ sub timer_events
 				die "Unknown event code ($code)";
 			}
 		}
-		state_cancellation $state;
+		state_cleanup $state;
 	};
 
 	# These timers are stopped. Ensure they display the correct state
@@ -1266,8 +1308,15 @@ sub create_timeline
 		my ($ts, $timer, $code, $arg1) = @$_;
 		if ($code eq 'T')
 		{
-			push @modifications, [ 'i', $ts, $arg1, $timer ]
-				if $arg1 != 0;
+			# Search back in @timeline and remove all events for this timer
+			@timeline = grep $$_[2] != $timer, @timeline;
+			# Search back in @modifications and remove all events for this timer
+			@modifications = grep $$_[3] != $timer, @modifications;
+			# If the timer is already running assume it started now
+			if (defined $timer_status{$timer})
+			{
+				$timer_status{$timer} = $ts;
+			}
 		}
 		elsif ($code eq 'D')
 		{
@@ -1279,6 +1328,7 @@ sub create_timeline
 		}
 		elsif ($code eq 'i')
 		{
+			# Add a 'transfer time' modification
 			push @modifications, [ 'i', $ts, $arg1, $timer ]
 				if $arg1 != 0;
 		}
@@ -1286,7 +1336,7 @@ sub create_timeline
 		{
 			if (defined $timer_status{$timer})
 			{
-				# Timer already running, stop it first
+				# Timer already running, stop it first.
 				# Stopping it first, as opposed to ignoring
 				# the second start, preserves this timestamp
 				# in the timeline. This method (adding an

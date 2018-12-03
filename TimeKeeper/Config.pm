@@ -42,6 +42,7 @@ BEGIN
 		get_pause_on_suspend get_pause_on_exit
 		get_activate_on_startup
 		get_debug_info_file get_keep_debug_info_period
+		get_keep_event_history_days
 		get_title_replace_common_prefix
 		get_default_font
 		get_exttool_entries
@@ -81,6 +82,7 @@ our $PauseOnExit;
 our $ActivateOnStartup;
 our $DebugInfoFileName;
 our $KeepDebugInfoPeriod;
+our $KeepEventHistoryDays;
 our $TitleReplaceCommonPrefix;
 our $DefaultFont;
 our $ExtTools;
@@ -426,6 +428,14 @@ sub get_debug_info_file
 sub get_keep_debug_info_period
 {
 	return $KeepDebugInfoPeriod;
+}
+
+# Returns the number of days that reset events should be kept in the Storage
+# file.
+# If this value is 0, events should be removed immediately after reset.
+sub get_keep_event_history_days
+{
+	return $KeepEventHistoryDays;
 }
 
 # Returns string to use instead of common prefix. Undef if no common prefix

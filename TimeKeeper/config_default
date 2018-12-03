@@ -50,6 +50,11 @@ $DebugInfoFileName = undef;
 # Number of seconds to keep the debug info messages in the log-file.
 $KeepDebugInfoPeriod = 7*24*60*60;
 
+# Number of days that events should be kept in the Storage file.
+# If this value is undef or 0, events that are reset will be removed from the
+# Storage file immediately.
+$KeepEventHistoryDays = 0;
+
 # When defined, description prefixes that occur for different timers are
 # replaced by this string in the window title when the timer is active.
 # When this value is of the form 's{...}{...}', this substitution is performed
