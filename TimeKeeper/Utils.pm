@@ -33,7 +33,7 @@ BEGIN
 		unix2dos dos2unix
 		copy_file
 
-		get_timestamp get_week
+		get_timestamp get_week is_leapyear
 		format_datetime_iso
 		format_datetime_full format_datetime_hm
 		format_date format_date_iso
