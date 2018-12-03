@@ -1221,21 +1221,28 @@ sub CbUpdateWallTime
 		# - YY: Year: First digit originally was the century ('4') and
 		#    the second digit the season ('1' is 1987, the first year
 		#    of Star Trek TNG).
-		# - DDD: Day: This number runs from 000 to 999 during the year.
-		# - T: This should divide the day in tens of hours
-		# I calculate it as follows: 1-1-2323 is stardate 0. Each year
-		# consists of 1000 parts. Each of those 1000 parts is 8.76
-		# hours (=31536 seconds). Use 5 decimal places to have roughly
-		# second resolution.
+		# - DDD: Day: This number goes from 000 to 999 during the year.
+		# - T: This should divide the day in ten parts.
+		# I calculate it as follows: 1-1-2323 is stardate 0 (Date of
+		# first contact). Each year consists of 1000 parts. Each of
+		# those 1000 parts is 8.76 hours (=31536 seconds).
+		# Use 4 decimal places so that a once-per-second update doesn't
+		# jump.
+		# It is a bit weird, but since this is a decimal date+time
+		# system, it means that the absolute time in the day gets
+		# smaller when the date is negative (i.e. before 1-1-2323).
+		# Example: The year 2322 (YY=-1) should run from -999 to 0.
 		my @parts = localtime $time;
 		my $year = $parts[5] + 1900;  # year
 		my $yday = $parts[7];  # day in year
 		my $dtime = $parts[2] * 60*60 + $parts[1] * 60 + $parts[0];  # time in day
 		my $ysecs = $yday * 24*60*60 + $dtime;  # seconds in year
+		my $max_yday = is_leapyear($year) ? 366 : 365;
 		# Convert to stardate
 		my $sdyear = $year - 2323;  # 1-1-2323 is origin
-		my $sdsecs = 1000 * $ysecs / (366*24*60*60);  # fraction of year in 0..999
-		$wall_time = sprintf "(Stardate)    %02d%3.5f", $sdyear, $sdsecs;
+		my $sdsecs = 1000 * $ysecs / ($max_yday*24*60*60);  # fraction of year in 0..999
+		my $stardate = ($sdyear * 1000) + $sdsecs;  # works for neg and pos years
+		$wall_time = sprintf "(Stardate)    %5.4f", $stardate;
 	}
 	else
 	{
