@@ -9,7 +9,7 @@ use Carp;
 
 use File::Basename;
 use File::Spec::Functions;
-use Time::Local;  # used for timezone calculation
+use Time::Local qw/timelocal timelocal_nocheck timegm/;  # used for timezone calculation
 
 use TimeKeeper::Core;
 use TimeKeeper::Storage;
