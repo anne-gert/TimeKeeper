@@ -532,22 +532,48 @@ sub get_timer_group_infos
 			# NB: Iterate defined groups first, so that those
 			# types will override the used ones.
 			my $name = $$group{name};
-			next if exists $$_timer_groups_by_name{$name};
+			next if exists $$_timer_groups_by_name{$name};  # already seen def
 
 			push @$_timer_groups, $group;
 			$$_timer_groups_by_name{$name} = $group;
 
+			# Check if this is the first read
+			if (!defined $old_timer_groups_by_name)
+			{
+				info "Read group '$name'\n";
+				$changed_groups{$name} = $group;
+				next;
+			}
+
 			# Check if it changed
 			my $old_group = $$old_timer_groups_by_name{$name};
-			if (!defined $old_group ||  # it's a new group
-				# the name is the same because we selected that key
-				$$group{type} ne $$old_group{type} ||
+			# the name is the same because we selected that key
+			if (!defined $old_group)
+			{
+				info "Group '$name' changed: New group\n";
+				$changed_groups{$name} = $group;
+			}
+			elsif ($$group{type} ne $$old_group{type})
+			{
+				info "Group '$name' changed: Type changed from '$$old_group{type}' to '$$group{type}'\n";
+			}
+			elsif (defined($$group{color}) != defined($$old_group{color}))
+			{
 				# if the defined-ness changed, the group was
 				# moved in or out of the groups file.
-				defined($$group{color}) != defined($$old_group{color}) ||
-				$$group{color} ne $$old_group{color})
+				if (defined($$group{color}))
+				{
+					info "Group '$name' changed: Added color\n";
+				}
+				else
+				{
+					info "Group '$name' changed: Removed color\n";
+				}
+				$changed_groups{$name} = $group;
+			}
+			elsif ($$group{color} ne $$old_group{color})
 			{
-				# This group's definition has changed.
+				info "Group '$name' changed: Color changed from '$$old_group{color}' to '$$group{color}'\n";
 				$changed_groups{$name} = $group;
 			}
 		}
@@ -555,7 +581,7 @@ sub get_timer_group_infos
 
 		# Go through the timers and update the ones that refer to a changed
 		# group.
-		info "Changed groups: @{[sort keys %changed_groups]}\n";
+		#info "Changed groups (GUI): @{[sort keys %changed_groups]}\n";
 		foreach my $timer (0..get_num_timers)
 		{
 			my $name = get_timer_current_group_name $timer;
@@ -564,16 +590,23 @@ sub get_timer_group_infos
 				my $color;
 				if (my $group = $changed_groups{$name})
 				{
-					info "Group '$name' has changed\n";
+					#info "Update Group '$name'\n";
 					$color = $$group{color};
 				}
 				else
 				{
-					info "Group '$name' has been removed\n";
+					#info "Update removed Group '$name'\n";
 					$color = undef;
 				}
 				&$cb_update_timer_group($timer, $name, $color)
 					if $cb_update_timer_group;
+			}
+			my $currType = get_timer_current_group_type $timer;
+			my $newType = $$_timer_groups_by_name{$name}{type};
+			if ($newType ne $currType)
+			{
+				# Update the timer type in the storage file.
+				set_timer_group_name($timer, $name);
 			}
 		}
 	}
