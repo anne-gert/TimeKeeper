@@ -58,8 +58,6 @@ BEGIN
 ##############################################################################
 ### Global variables
 
-sub create_eventid { get_random 16 }
-
 my $StartUpTime = get_storage_timestamp();
 
 # This @State array contains all the entries in the storage_file. Each entry
@@ -88,21 +86,7 @@ my $StartUpTime = get_storage_timestamp();
 #     - <no arguments>
 # The @State should be ordered by time (duplicate timestamps are allowed), so
 # that it can be processed from beginning to end to 'replay' the events.
-my @State = (
-	[ $StartUpTime, 0, "D", "Rest time",             create_eventid ],
-	[ $StartUpTime, 1, "D", "Lunch",                 create_eventid ],
-	[ $StartUpTime, 2, "D", "General Meeting",       create_eventid ],
-	[ $StartUpTime, 3, "D", "Project Meeting",       create_eventid ],
-	[ $StartUpTime, 4, "D", "Implementation",        create_eventid ],
-	[ $StartUpTime, 5, "D", "Writing webpage",       create_eventid ],
-
-	[ $StartUpTime, 0, "G", "Other activities",   2, create_eventid ],
-	[ $StartUpTime, 1, "G", "Own time",           1, create_eventid ],
-	[ $StartUpTime, 2, "G", "General",            0, create_eventid ],
-	[ $StartUpTime, 3, "G", "Project Strawberry", 0, create_eventid ],
-	[ $StartUpTime, 4, "G", "Project Strawberry", 0, create_eventid ],
-	[ $StartUpTime, 5, "G", "Project Strawberry", 0, create_eventid ],
-);
+my @State = ();
 my $Storage_appended = 0;  # number of events appended
 my $Storage_changed = 1;  # if true, entire state might have been changed
 my $Storage_ts = undef;  # timestamp van the last read storage file
@@ -845,6 +829,11 @@ sub replay_state
 
 ##############################################################################
 ### Absolute state setting functions
+
+sub create_eventid
+{
+	get_random 16;
+}
 
 # Set the specified timer(s) to the specified time. Do not use get-modify-set
 # construction, but rather inc_timer_time().

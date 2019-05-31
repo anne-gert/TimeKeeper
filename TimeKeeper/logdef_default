@@ -13,12 +13,10 @@ my $AL_Timeline_csv = "Generate Timeline CSV";
 
 
 # Calculate global data
-my @DiscardTimers = grep {
-		my $type = get_timer_current_group_type $_;
-		$type == 1 || $type == 2;
-	} (0..get_num_timers);
-my $get_isworktime = sub { my $timer = shift; get_timer_current_group_type($timer) == 0 };
-my $get_isvacation = sub { my $timer = shift; get_timer_current_group_type($timer) == 3 };
+my @DiscardTimers = grep is_timer_group_type($_, "-", "O"), (0..get_num_timers);
+my $get_isworktime = sub { my $timer = shift; is_timer_group_type $timer, "W" };
+my $get_isvacation = sub { my $timer = shift; is_timer_group_type $timer, "V" };
+my $get_isproject = sub { my $timer = shift; is_timer_group_type $timer, "p" };
 
 my $now = get_timestamp;
 my $year = (localtime $now)[5] + 1900;
@@ -77,6 +75,7 @@ else
 	$log .= "---------------------------------------------\n";
 	$log .= format_log_groups_2 "<description>: <time>", $get_isworktime;
 	$log .= format_log_total "Entire week: <time>", $get_isworktime;
+	$log .= format_log_total "(All projects: <time>)\n", $get_isproject;
 
 	$log .= "\n\n";
 }
