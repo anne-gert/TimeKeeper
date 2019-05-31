@@ -541,28 +541,43 @@ sub GetTextColorForBackground
 	# - Red: #D00000 -> 208, 0, 0 -> 0.816, 0, 0
 	# - Green: #006000 -> 0, 96, 0 -> 0, 0.376, 0
 	# - Blue: #3030FF -> 48, 48, 255 -> 0.188, 0.188, 1
-	# Equate each of these to the 'magical' intensity I and it follows
-	# that using weights of 299:587:114 yields the following values for I:
+	#
+	# Some extra information is on http://stackoverflow.com/questions/596216/formula-to-determine-brightness-of-rgb-color,
+	# where it is stated that there are 3 formulas:
+	# A. Luminance (standard for certain colour spaces): (0.2126*R + 0.7152*G + 0.0722*B)
+	# B. Luminance (perceived option 1): (0.299*R + 0.587*G + 0.114*B)
+	# C. Luminance (perceived option 2, slower to calculate): sqrt( 0.299*R^2 + 0.587*G^2 + 0.114*B^2 )
+	# Others state one should just take the maximum.
+	#
+	# Now calculate the values of each of the 3 colors above in the
+	# different formulas:
+	# - Formula A:
+	#   0.816*0.2126 +     0*0.7152 + 0*0.0722 = 0.173
+	#       0*0.2126 + 0.376*0.7152 + 0*0.0722 = 0.269
+	#   0.188*0.2126 + 0.188*0.7152 + 1*0.0722 = 0.247
+	# - Formula B:
+	#   0.816*0.299 +     0*0.587 + 0*0.114 = 0.244
+	#       0*0.299 + 0.376*0.587 + 0*0.114 = 0.221
+	#   0.188*0.299 + 0.188*0.587 + 1*0.114 = 0.281
+	# - Formula C:
 	#   sqrt(0.816^2*0.299 +     0^2*0.587 + 0^2*0.114) = 0.446
 	#   sqrt(    0^2*0.299 + 0.376^2*0.587 + 0^2*0.114) = 0.288
 	#   sqrt(0.188^2*0.299 + 0.188^2*0.587 + 1^2*0.114) = 0.381
 	#
-	# The conclusion is that the weights look reasonable and that the
-	# minimum intensity to use black text color is about 0.4. Below that
-	# we should use white text color.
+	# From the numbers above, it looks like formula B has the values
+	# closest together.
+	# However when visually checked, relatively dark greys still have
+	# an intensity that warrants a black foreground color. This means
+	# that Formula B is not so good at combining the color channels.
 	#
-	# Some extra information is on http://stackoverflow.com/questions/596216/formula-to-determine-brightness-of-rgb-color,
-	# where it is stated that there are 2 formulas:
-	# - Luminance (standard for certain colour spaces): (0.2126*R + 0.7152*G + 0.0722*B)
-	# - Luminance (perceived option 1): (0.299*R + 0.587*G + 0.114*B)
-	# - Luminance (perceived option 2, slower to calculate): sqrt( 0.299*R^2 + 0.587*G^2 + 0.114*B^2 )
-	# Others state one should just take the maximum
+	# Formula C corrects better for this situation. I use an intensity
+	# cut-off of 0.5, which looks best visually.
 
 	# Get the perceived intensity.
 	my $intensity = $self->GetWeightedIntensity($bgcolor);
 	#info "Color '$bgcolor': Intensity $intensity\n";
 
-	if ($intensity > 0.4)
+	if ($intensity > 0.5)
 	{
 		return "black";
 	}
@@ -572,13 +587,56 @@ sub GetTextColorForBackground
 	}
 }
 
+# This method calculates the intensity according to a certain formula.
+# $color is any color accepted by the underlying plugin.
+# Returns a value in 0..1 range.
+sub GetWeightedIntensity
+{
+	my $self = shift;
+	my ($color) = @_;
+
+	return $self->GetWeightedIntensity_FormulaC($color);
+}
+
+# This method calculates the intensity for certain colour spaces.
+# $color is any color accepted by the underlying plugin.
+# Explanation:
+# The human eye is not equally sensitive to all color components. The weights
+# are about r:g:b = 0.2126 : 0.7152 : 0.0722
+# Returns a value in 0..1 range.
+sub GetWeightedIntensity_FormulaA
+{
+	my $self = shift;
+	my ($color) = @_;
+
+	my ($r, $g, $b) = $self->GetRgb($color);
+	#info "Color '$color': Components($r, $g, $b)\n";
+	return 0.2126*$r + 0.7152*$g + 0.0722*$b;
+}
+
 # This method calculates the intensity as it is perceived by the eye.
 # $color is any color accepted by the underlying plugin.
 # Explanation:
 # The human eye is not equally sensitive to all color components. The weights
 # are about r:g:b = 0.299 : 0.587 : 0.114
 # Returns a value in 0..1 range.
-sub GetWeightedIntensity
+sub GetWeightedIntensity_FormulaB
+{
+	my $self = shift;
+	my ($color) = @_;
+
+	my ($r, $g, $b) = $self->GetRgb($color);
+	#info "Color '$color': Components($r, $g, $b)\n";
+	return 0.299*$r + 0.587*$g + 0.114*$b;
+}
+
+# This method calculates the intensity as it is perceived by the eye.
+# $color is any color accepted by the underlying plugin.
+# Explanation:
+# The human eye is not equally sensitive to all color components. The weights
+# are about r:g:b = 0.299 : 0.587 : 0.114
+# Returns a value in 0..1 range.
+sub GetWeightedIntensity_FormulaC
 {
 	my $self = shift;
 	my ($color) = @_;
