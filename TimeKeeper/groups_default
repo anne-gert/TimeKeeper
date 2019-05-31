@@ -1,14 +1,17 @@
 # This file defines the timer groups that can be selected.
 # Each line contains the following fields that are separated by tabs:
 # - Type: This can be any value (also string) that can be used in the logdef
-#     to differentiate between groups.
+#     to differentiate between groups. The function TimeKeeper::Core::is_timer_group_type()
+#     can be used to match a Timer's Group's Type against a value or regex.
+#     The Type can also be a list.
 # - Color: This is the color that is used as background color for the group.
 #     The format can be #rrggbb. This can be left empty for no coloring.
 # - Name: This is the name of the group
 
-0	#CCDDFF	General
-0	#FFCCDD	Project Strawberry
-2	#AAAAAA	Other activities
-1	#FFFFCC	Own time
+W	#CCDDFF	General
+W,p	#FFCCDD	Project Strawberry
+O	#AAAAAA	Other activities
+-	#FFFFCC	Own time
+V	#CCFFDD	Vacation
 
 

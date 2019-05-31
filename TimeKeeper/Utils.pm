@@ -27,6 +27,7 @@ BEGIN
 		get_perl_value
 		round
 		get_random
+		is_integer is_regex
 
 		get_startup_path
 		mkfiledir create_temp_text
@@ -155,6 +156,22 @@ sub get_random
 	# truncate surplus
 	$s = substr $s, 0, $length;
 	return $s;
+}
+
+# Returns true if the argument is an integer numeric.
+sub is_integer($)
+{
+	my ($value) = @_;
+
+	return $value =~ /^[+-]?\d+$/;
+}
+
+# Returns true if the argument is a regex (i.e. qr/.../).
+sub is_regex($)
+{
+	my ($value) = @_;
+
+	return ref $value eq "Regexp";
 }
 
 

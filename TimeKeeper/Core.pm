@@ -34,6 +34,7 @@ BEGIN
 		time_tick
 		set_description_delayed force_pending_description_changes
 		get_timer_group_infos get_timer_group_info set_timer_group_name
+		is_timer_group_type
 		show_timer set_timer add_timer add_active_timer transfer_time
 		get_previous_period_info
 		is_generate_log_target add_remove_generate_log_target
@@ -230,7 +231,25 @@ sub read_all_config
 	read_config_file;
 	redirect_debug_info \&get_debug_info_file;
 	read_status_file;
-	read_storage_file;
+	my $state = read_storage_file;
+	unless (@$state)
+	{
+		# There is no state, make some default filling
+		my $preset_timer = sub {
+			my ($timer, $description, $groupname) = @_;
+
+			my $now = get_timestamp;
+			set_timer_description $timer, $description, $now;
+			set_timer_group_name($timer, $groupname);
+		};
+
+		$preset_timer->(0, "Rest time", qr/other/i);
+		$preset_timer->(1, "Lunch", qr/own/i);
+		$preset_timer->(2, "General Meeting", qr/general/i);
+		$preset_timer->(3, "Project Meeting", qr/project/i);
+		$preset_timer->(4, "Implementation", qr/project/i);
+		$preset_timer->(5, "Writing webpage", qr/project/i);
+	}
 }
 
 # Write the files that contain status (status and storage).
@@ -510,6 +529,8 @@ sub get_timer_group_infos
 			# and/or used.
 			# NB: All groups that are displayed in the timers are
 			# used groups and are thus included in this iteration.
+			# NB: Iterate defined groups first, so that those
+			# types will override the used ones.
 			my $name = $$group{name};
 			next if exists $$_timer_groups_by_name{$name};
 
@@ -561,16 +582,29 @@ sub get_timer_group_infos
 
 # Return the timer group entry for the specified group name.
 # Returns undef if groupname could not be found.
+# If $groupname is a regex, the first matching is returned.
 sub get_timer_group_info
 {
 	my ($groupname) = @_;
 
 	get_timer_group_infos;  # update cache
 	#info "get_timer_group_info($groupname)\n";
-	return $$_timer_groups_by_name{$groupname};
+	if (is_regex $groupname)
+	{
+		return undef unless defined $_timer_groups;
+		foreach (@$_timer_groups)
+		{
+			return $_ if $$_{name} =~ $groupname;
+		}
+	}
+	else
+	{
+		return $$_timer_groups_by_name{$groupname};
+	}
 }
 
 # Change the timer group for the specified timer to the one with groupname.
+# If $groupname is a regex, the first matching is returned.
 sub set_timer_group_name
 {
 	my ($timer_id, $groupname) = @_;
@@ -622,6 +656,52 @@ sub reevaluate_timer_groups
 
 	# (Re-)check the timer groups
 	get_timer_group_infos;  # update cache
+}
+
+# Test the Timer's TimerGroup's Type.
+# Arguments:
+# - $timer: The Timer number whose TimerGroup to test.
+# - @group_types: The GroupTypes to match. If any matches, true is returned.
+# A group_type can be:
+# - regex: Perform a regex comparison.
+# - numeric: If the Timer's group is also numeric, a numeric compare is done.
+# - string: If neither of the above cases is true, a string comparison is done.
+# If the Timer's TimerGroup contains ',', it is regarded as a comma separated
+# list of values. If any of the values match, this function returns true.
+sub is_timer_group_type
+{
+	my ($timer, @group_types) = @_;
+
+	my $timer_group_type = get_timer_current_group_type($timer);
+	if (!defined $timer_group_type)
+	{
+		# This type does not have a group, return false
+		return 0;
+	}
+
+	my @timer_group_types = split /,/, $timer_group_type;
+	foreach my $timer_group_type (@timer_group_types)
+	{
+		foreach my $group_type (@group_types)
+		{
+			if (is_regex $group_type)
+			{
+				# Test against a regex
+				return 1 if $timer_group_type =~ $group_type;
+			}
+			elsif (is_integer $group_type && is_integer $timer_group_type)
+			{
+				# Test numeric
+				return 1 if $timer_group_type == $group_type;
+			}
+			else
+			{
+				# Test as string
+				return 1 if $timer_group_type eq $group_type;
+			}
+		}
+	}
+	return 0;  # there was no match
 }
 
 
