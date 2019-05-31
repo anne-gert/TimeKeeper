@@ -1166,10 +1166,15 @@ sub get_timer_current_group_type
 # Go through all events and gather all groups that are in use.
 # If a group occurs multiple times, it is only returned once.
 # Groups are returned in case-insensitive aphanumerical order.
+# If $all==true, all groups in the storage file are returned, otherwise only
+# the currently-in-use groups (i.e. the last group per timer) is returned.
 # Note that these groups don't contain a color field.
 sub get_used_timer_groups
 {
-	my %groups;
+	my ($all) = @_;
+
+	my %groups;  # group name -> group properties
+	my %current;  # timer -> current group name
 	my $state = read_storage_file;
 	foreach (@$state)
 	{
@@ -1177,14 +1182,36 @@ sub get_used_timer_groups
 		if ($code eq 'G')
 		{
 			my ($name, $type) = ($arg1, $arg2);
-			next if $name eq "";  # This is a deleted group
-			$groups{$name} = {
-				name  => $name,
-				type  => $type,
-			};
+			if ($name ne "")
+			{
+				$current{$timer} = $name;  # maintain the last name
+				$groups{$name} = {
+					name  => $name,
+					type  => $type,
+				};
+			}
+			else
+			{
+				# This is a deleted group
+				delete $current{$timer};  # maintain the last name
+			}
+
 		}
 	}
-	my @groups = sort { lc $$a{name} cmp lc $$b{name} } values %groups;
+	my @groups;
+	if ($all)
+	{
+		# Get all groups
+		@groups = values %groups;
+	}
+	else
+	{
+		# Get the groups referred to in %current
+		my %currgroups;
+		++$currgroups{$_} foreach values %current;
+		@groups = @groups{keys %currgroups};
+	}
+	@groups = sort { lc $$a{name} cmp lc $$b{name} } @groups;
 	return \@groups;
 }
 
