@@ -647,7 +647,7 @@ sub set_timer_group_name
 	if ($groupname eq "")
 	{
 		# We should set the 'emtpy' group
-		$grouptype = 0;
+		$grouptype = "";
 		$set = 1;
 	}
 	else
