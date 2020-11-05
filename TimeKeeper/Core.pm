@@ -1091,7 +1091,7 @@ sub generate_log
 
 	my $fname = get_logdef_file;
 	create_default_logdef unless -e $fname;
-	# $AltLogId is package variable, so it is visible inside do.
+	# $AltLogId is package variable, so it is visible inside do().
 	my $log = do $fname;  # "do get_logdef_file" doesn't work
 	unless (defined $log)
 	{
@@ -1099,6 +1099,8 @@ sub generate_log
 		# If that is the case and we don't have a GUI yet, no error
 		# will be displayed with wperl. Therefore, write the error also
 		# to the info log.
+		# $! will be set if the file could not be read, $@ will be set
+		# if file could not be compiled.
 		my $msg = "Error in log: $!$@\n";
 		info $msg;
 		die $msg;
@@ -1110,7 +1112,14 @@ sub generate_log
 sub get_alt_logs
 {
 	our @AltLogs;
-	generate_log;  # sets global @AltLogs
+	eval
+	{
+		generate_log;  # sets global @AltLogs
+	};
+	if ($@)
+	{
+		info "Warning: Could not determine alternative log formats";
+	}
 	return @AltLogs;
 }
 
