@@ -989,27 +989,42 @@ sub transfer_time
 	return $ok;
 }
 
-# Get the period before the current period (period on the active timer) and
-# return that as (start, stop, timer).
+# Get the period before the current period.
+# The searched period is the period with the biggest stop time that is in the
+# past and (if $allow_active_timer==true) that is not the active timer.
+# Return previous period as (start, stop, timer).
 # If no such period can be found, an empty array is returned.
 sub get_previous_period_info
 {
+	my ($allow_active_timer) = @_;
+
 	my $timeline = timeline_nice -discard => [],
 		-min_gap => 10, -min_period => 0, -round => 0;
-	my $last = pop @$timeline;
-	if (defined $last && $$last[2] == get_active)
+	# This timeline is sorted from old to most recent (NB: it is possible
+	# that there are entries with timestamps in the future).
+	my $now = time;
+	my $active = get_active;
+	foreach my $entry (reverse @$timeline)  # start searching from the back
 	{
-		# Last period is the currently running one on the active timer
-		$last = pop @$timeline;  # skip it
+		my ($start, $stop, $timer) = @$entry;
+		if (
+			# It should have ended -> not running, because if it
+			# is running, it is a current timer, not a previous
+			# one.
+			$stop > 0 &&
+			# It should be in the past -> it should not be in the
+			# future. Some entries can be in the future, e.g.
+			# holidays.
+			$stop <= $now &&
+			# Optionally skip if it is the current timer -> if it
+			# is the same timer as the current, it is not really a
+			# different period.
+			($allow_active_timer || $timer != $active))
+		{
+			return @$entry;
+		}
 	}
-	if (defined $last)
-	{
-		return @$last;
-	}
-	else
-	{
-		return ();
-	}
+	return ();  # no entry found
 }
 
 
