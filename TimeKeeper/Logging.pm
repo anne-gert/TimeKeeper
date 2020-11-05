@@ -50,7 +50,7 @@ BEGIN
 # Optional arguments (in "-option => value" syntax):
 # -round_up [default 0.5]: Specifies the fraction from where to round up.
 # -round_up_last [default -round_up]: Specifies the fraction from where to
-#    round up for the last (= biggest) value. This may be set differently,
+#    round up for the last (=biggest) value. This may be set differently,
 #    because this is where all of the value ends up.
 # -round_up_small [default 0.25]: Specifies the fraction from where to round
 #    up for small values. Small values are values less than 1, so that
@@ -70,6 +70,7 @@ sub progressive_round
 	} keys %$items;
 
 	# Round the items, start with the smallest value.
+	my @zeroed;
 	for (my $i = 0; $i < @names; ++$i)
 	{
 		my $name = $names[$i];
@@ -103,6 +104,7 @@ sub progressive_round
 			? $value_wholes + $round_to  # round up
 			: $value_wholes;  # round down
 		$$items{$name} = $new_value;
+		push @zeroed, $name if $new_value <= 0;
 		my $round = $new_value - $value;  # amount to round
 		#print "DEBUG: Set '$name' $value -> $new_value (round=$round) (frac=$value_frac, round_up_frac=$round_up_frac)\n";
 
@@ -111,6 +113,7 @@ sub progressive_round
 		if ($round != 0)
 		{
 			# Calculate the total for the bigger items
+			# (Bigger items are later in @names)
 			my $total = 0;
 			for (my $j = $i + 1; $j < @names; ++$j)
 			{
@@ -133,6 +136,9 @@ sub progressive_round
 			}
 		}
 	}
+
+	# Remove the items that have no time anymore
+	delete @$items{@zeroed};
 }
 
 
