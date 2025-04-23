@@ -1277,7 +1277,7 @@ sub get_timer_extra
 	}
 
 	# Collect all the changes in this window plus the one before.
-	my @values;
+	my @values = ( undef );  # already create the element for the one before
 	foreach my $entry (@{$ExtraInfo{$timer}{$extra_info_name}{sorted}})
 	{
 		#info "ExtraInfo entry '$extra_info_name': '@$entry'\n";
@@ -1304,14 +1304,17 @@ sub get_timer_extra
 
 	if (wantarray)
 	{
+		#info "Return get_timer_extra=" . join(", ", map "'$_'", @values) . "\n";
 		return @values;  # return all
 	}
 	elsif (@values > 0)
 	{
+		#info "Return get_timer_extra='$values[-1]'\n";
 		return $values[-1];  # return last
 	}
 	else
 	{
+		#info "Return get_timer_extra='undef'\n";
 		return undef;  # none to return
 	}
 }

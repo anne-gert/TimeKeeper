@@ -46,6 +46,7 @@ BEGIN
 		get_title_replace_common_prefix
 		get_default_font
 		get_exttool_entries
+		get_monitor_ip
 		),
 		# Specified in status file (transient, persistent data)
 		qw(
@@ -86,6 +87,7 @@ our $KeepEventHistoryDays;
 our $TitleReplaceCommonPrefix;
 our $DefaultFont;
 our $ExtTools;
+our $MonitorIP;
 
 
 ##############################################################################
@@ -490,6 +492,13 @@ sub get_exttool_entries
 		push @exttools, [ $1, $2 ];
 	}
 	return @exttools;
+}
+
+# Returns it it is configured to monitor and record the outgoing IP address.
+# This can be used in the log to derive when the computer was running where.
+sub get_monitor_ip
+{
+	return $MonitorIP;
 }
 
 
