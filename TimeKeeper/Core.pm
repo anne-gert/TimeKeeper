@@ -98,6 +98,7 @@ sub show_timer;
 sub get_timestamp;
 sub process_pending_description_changes;
 sub get_timer_group_info;
+sub finalize_on_signal;
 
 
 ##############################################################################
@@ -416,6 +417,16 @@ sub initialize
 	{
 		timer_run $active_timer;
 	}
+
+	# Install signal handlers to save the state
+	foreach my $sig (qw/HUP INT ABRT QUIT TERM KILL/)
+	{
+		my $prev_handler = $SIG{$sig};
+		$SIG{$sig} = sub {
+			finalize_on_signal($sig);
+			$prev_handler->($sig) if ref($prev_handler) eq "CODE";
+		};
+	}
 }
 
 # Initialize user interface (like draw correct state for widgets) before
@@ -435,9 +446,13 @@ sub initialize_ui
 	}
 }
 
+my $_IsFinalized = 0;
+
 # Finalizes application. Called just before exit.
 sub finalize
 {
+	info "Save status\n";
+
 	# If timer should stop on exit, do that here.
 	if (!get_keep_running_status && get_pause_on_exit)
 	{
@@ -454,6 +469,27 @@ sub finalize
 
 	# Update all configuration changes
 	update_all_config;
+
+	info "Save status done\n";
+	$_IsFinalized = 1;
+}
+
+# This function is called when stopped on a signal.
+# It calls finalize if not already executed.
+sub finalize_on_signal
+{
+	my ($sig) = @_;
+
+	if ($_IsFinalized)
+	{
+		info "Caught SIG$sig. Already saved status, do nothing\n";
+	}
+	else
+	{
+		info "Caught SIG$sig. Save status\n";
+		finalize;
+	}
+	exit(1);
 }
 
 
@@ -847,20 +883,45 @@ sub time_tick
 	my $active_timer = get_active;
 	if ($time != $LastTime)
 	{
-		# The time has changed, update times
-
-		if (!get_keep_running_status && get_pause_on_suspend &&
-			!$IsStopped &&
-			$LastTime > 0 && $time - $LastTime > $MaxTimeBetweenTicks)
+		# The time (in seconds) has changed, update times
+		if ($time - $LastTime > $MaxTimeBetweenTicks)
 		{
-			# No activity for a certain time
-			# ($MaxTimeBetweenTicks), so suspend is assumed.  If
-			# PauseOnSuspend is configured, pause the timer, but
-			# also start it again, because now there is activity
-			# again.
-			my @events = [ "p", $active_timer, $LastTime ];
-			push @events, [ "r", $active_timer ];
-			timer_events \@events;
+			# This function has not been called for too long
+			# ($MaxTimeBetweenTicks). We are now in Suspend Detected.
+			if (get_keep_running_status)
+			{
+				info "Suspend detected, but currently keep_running_status==true\n";
+			}
+			else
+			{
+				if ($IsStopped)
+				{
+					info "Suspend detected, but no timers are running\n";
+				}
+				else
+				{
+					if (get_pause_on_suspend)
+					{
+						if ($LastTime <= 0)
+						{
+							info "Start-up suspend detection\n";
+						}
+						else
+						{
+							# Pause the timer, but also start it again, because now
+							# there is activity again.
+							info "Suspend detected -> Pause timer during suspend\n";
+							my @events = [ "p", $active_timer, $LastTime ];
+							push @events, [ "r", $active_timer ];
+							timer_events \@events;
+						}
+					}
+					else
+					{
+						info "Suspend detected, but configured pause_on_suspend==false\n";
+					}
+				}
+			}
 		}
 
 		if (($time % (60*60)) == 0)
@@ -875,6 +936,7 @@ sub time_tick
 
 		if (($time % 60) == 0)
 		{
+			# Execute this every minute
 			if ($MonitorIP)
 			{
 				# Check current IP address
