@@ -38,7 +38,7 @@ BEGIN
 		# Specified in config file (user-defined configuration)
 		qw(
 		get_num_timers
-		get_cmd_edit
+		get_cmd_edit get_cmd_view
 		get_pause_on_suspend get_pause_on_exit
 		get_activate_on_startup
 		get_debug_info_file get_keep_debug_info_period
@@ -73,6 +73,7 @@ our $ConfigFileName = 'config';
 
 our $NumTimers;
 our $CmdEdit;
+our $CmdView;
 our $StatusFileName;
 our $LogDefFileName;
 our $DataFileName;
@@ -397,6 +398,22 @@ sub get_cmd_edit
 	else
 	{
 		$cmd = 'gvim "%s"';
+	}
+	return sprintf $cmd, $fname;
+}
+
+sub get_cmd_view
+{
+	my ($fname) = @_;
+
+	my $cmd;
+	if ($CmdView)
+	{
+		$cmd = $CmdView;
+	}
+	else
+	{
+		return get_cmd_edit $fname;  # edit is fall-back
 	}
 	return sprintf $cmd, $fname;
 }

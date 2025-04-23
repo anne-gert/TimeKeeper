@@ -40,7 +40,7 @@ BEGIN
 		get_previous_period_info
 		is_generate_log_target add_remove_generate_log_target
 		edit_logdef generate_log get_alt_logs make_log
-		edit_text edit_file
+		view_file edit_file view_text
 		edit_config edit_storage edit_groups
 		read_all_config write_all_config update_all_config
 
@@ -103,12 +103,11 @@ sub get_timer_group_info;
 ##############################################################################
 ### General functions
 
-# Edit an existing file with the defined editor.
-sub edit_file
+# View or edit an existing file with the defined command.
+sub view_or_edit_file
 {
-	my ($fname) = @_;
+	my ($cmd, $fname) = @_;
 
-	my $cmd = get_cmd_edit $fname;
 	if ($cmd eq "stdout")
 	{
 		# Read the contents and print it to stdout
@@ -129,12 +128,30 @@ sub edit_file
 	}
 }
 
+# View an existing file with the defined editor.
+sub view_file
+{
+	my ($fname) = @_;
+
+	my $cmd = get_cmd_view $fname;
+	view_or_edit_file $cmd, $fname;
+}
+
+# Edit an existing file with the defined editor.
+sub edit_file
+{
+	my ($fname) = @_;
+
+	my $cmd = get_cmd_edit $fname;
+	view_or_edit_file $cmd, $fname;
+}
+
 # Displays text in the editor. Via a temporary file.
-sub edit_text
+sub view_text
 {
 	my ($text) = @_;
 
-	if (get_cmd_edit eq "stdout")
+	if (get_cmd_view eq "stdout")
 	{
 		# Just print the text to stdout
 		print $text;
@@ -142,7 +159,7 @@ sub edit_text
 	else
 	{
 		my $fname = create_temp_text $text;
-		edit_file $fname;
+		view_file $fname;
 	}
 }
 
@@ -1271,7 +1288,7 @@ sub make_log
 	}
 	if ($targets{editor})
 	{
-		edit_text $log;
+		view_text $log;
 	}
 }
 

@@ -14,6 +14,13 @@ $NumTimers = 10;
 # - Otherwise: 'gvim "%s"'
 # Tip: To have automatic line highlighting in gvim, use 'gvim -c "set cul" "%s"'
 $CmdEdit = undef;
+# Command to execute when a (temporary) file should be viewed (readonly).
+# This is uses as a 'printf' template. The first argument is the filename to
+# view.
+# Use 'stdout' to just print the contents to stdout.
+# Use undef to use the value of $CmdEdit.
+# Tip: To do this in gvim, use 'gvim -c "set nomodifiable" -R "%s"'
+$CmdView = undef;
 
 # Filename of the configuration file with transient, program-defined settings.
 # This filename can be an absolute path or relative to this config file.
