@@ -114,28 +114,25 @@ sub create
 	}
 	# If we get here, none of the previous types resulted in a proper
 	# return. Print a message and exit.
-	print "Could not find working GUI plugin: @plugins.\n\n";
-	report_missing_module("Tkx");
-	report_missing_module("Tk");
+	print <<"TEXT";
+Could not find working GUI plugin: @plugins.
+
+Module Tkx can be installed with one of the following commmands:
+- ActiveState Perl: ppm install Tkx
+- Ubuntu: apt install tcl libtcl-perl tk tklib bwidget
+          perl -MCPAN -e "install Tcl, Tcl::Tk, Tkx"
+- CentOS: yum install tcl tk tklib bwidget
+          perl -MCPAN -e "install Tcl, Tcl::Tk, Tkx"
+
+Module Tk can be installed with one of the following commmands:
+- ActiveState Perl: Not available
+- Ubuntu: apt install perl-tk
+- CentOS: yum install perl-Tk
+TEXT
 	print "\nPress any key...";
 	scalar <STDIN>;
 	print "\n";
 	exit 1;
-}
-
-sub report_missing_module
-{
-	my ($module, $name_ppm, $name_apt, $name_yum) = @_;
-	$name_ppm = $module unless defined $name_ppm;
-	($name_apt = "perl-$module") =~ s/::/-/ unless defined $name_apt;
-	$name_yum = $name_apt unless defined $name_yum;
-	print << "MSG";
-Perl Module $module seems to be not installed.
-It can be installed with one of the following commmands:
-- ActiveState Perl: ppm install $name_ppm
-- Ubuntu: apt-get install $name_apt
-- CentOS: yum install $name_yum
-MSG
 }
 
 # Construct
