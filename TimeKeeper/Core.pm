@@ -35,6 +35,7 @@ BEGIN
 		set_description_delayed force_pending_description_changes
 		get_timer_group_infos get_timer_group_info set_timer_group_name
 		is_timer_group_type
+		make_regex_group_type_validity_from_flags check_timer_group_type_validity
 		show_timer set_timer add_timer add_active_timer transfer_time
 		get_previous_period_info
 		is_generate_log_target add_remove_generate_log_target
@@ -735,6 +736,43 @@ sub is_timer_group_type
 		}
 	}
 	return 0;  # there was no match
+}
+
+# Make a group type regular expression that can be used with
+# check_timer_group_type_validity().
+# Input:
+# - Separate flags (any character).
+# - Separator regex. Defaults to comma (,) if not specified.
+# Returns Regex that allows the flags in any order, separated by the separator.
+sub make_regex_group_type_validity_from_flags
+{
+	my (@flags, $separator) = @_;
+	$separator = "," unless defined $separator;
+
+	# Match on any of the given flags
+	my $flags = "(" . (join "|", map "\Q$_\E", @flags) . ")";
+	# 0 or more separated flags.
+	return qr/^($flags($separator$flags)*)?$/;
+}
+
+# Check group type of all timers against the specified regular expression.
+# This regex can be created with make_regex)group_type_validity_from_flags().
+# Returns string with one error per line.
+sub check_timer_group_type_validity
+{
+	my ($type_regex) = @_;
+
+	my @errors = ();
+	my $timer_group_infos = get_timer_group_infos;
+	foreach my $group_info (@$timer_group_infos)
+	{
+		my ($name, $type) = @$group_info{qw/name type/};
+		if ($type !~ $type_regex)
+		{
+			push @errors, "ERROR: Timer '$name' has invalid timer group type: '$type'";
+		}
+	}
+	return join "\n", @errors;
 }
 
 
