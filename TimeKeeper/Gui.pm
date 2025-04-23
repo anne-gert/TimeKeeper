@@ -1282,15 +1282,22 @@ sub CbUpdateWallTime
 		#    of Star Trek TNG).
 		# - DDD: Day: This number goes from 000 to 999 during the year.
 		# - T: This should divide the day in ten parts.
-		# I calculate it as follows: 1-1-2323 is stardate 0 (Date of
-		# first contact). Each year consists of 1000 parts. Each of
-		# those 1000 parts is 8.76 hours (=31536 seconds).
-		# Use 4 decimal places so that a once-per-second update doesn't
-		# jump.
+		# Stardate 0 is the date of first contact. According to the
+		# movie 'StartTrek: First Contact', the date of first contact
+		# was 5-4-2063. Since DDD is a fraction within a year, I assume
+		# the real 0 is on 1-1-2063.
+		# NB: Startrek Discovery season 1, episode 1 starts at stardate
+		# 1207.3, which is 11-5-2256. This is in accordance with the
+		# Original series (see https://en.wikipedia.org/wiki/Stardate ).
+		# I will use the Revised Stardate.
+		# I calculate the Stardate as follows: 1-1-2063 is stardate 0.
+		# Each year consists of 1000 parts. Each of those 1000 parts is
+		# 8.76 hours (=31536 seconds).  Use 4 decimal places so that a
+		# once-per-second update doesn't jump.
 		# It is a bit weird, but since this is a decimal date+time
 		# system, it means that the absolute time in the day gets
-		# smaller when the date is negative (i.e. before 1-1-2323).
-		# Example: The year 2322 (YY=-1) should run from -999 to 0.
+		# smaller when the date is negative (i.e. before 1-1-2063).
+		# Example: The year 2062 (YY=-1) should run from -999 to 0.
 		my @parts = localtime $time;
 		my $year = $parts[5] + 1900;  # year
 		my $yday = $parts[7];  # day in year
@@ -1298,7 +1305,7 @@ sub CbUpdateWallTime
 		my $ysecs = $yday * 24*60*60 + $dtime;  # seconds in year
 		my $max_yday = is_leapyear($year) ? 366 : 365;
 		# Convert to stardate
-		my $sdyear = $year - 2323;  # 1-1-2323 is origin
+		my $sdyear = $year - 2063;  # 1-1-2063 is origin
 		my $sdsecs = 1000 * $ysecs / ($max_yday*24*60*60);  # fraction of year in 0..999
 		my $stardate = ($sdyear * 1000) + $sdsecs;  # works for neg and pos years
 		$wall_time = sprintf "(Stardate)    %5.4f", $stardate;
