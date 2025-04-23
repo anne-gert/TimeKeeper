@@ -97,4 +97,8 @@ $DefaultFont = '';
 $ExtTools = '
 ';
 
+# When set to true, the outgoing IP address is monitored and recorded in the
+# storage file.
+# This can be used in the log to derive when the computer was running where.
+$MonitorIP = 1;
 

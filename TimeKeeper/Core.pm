@@ -70,6 +70,7 @@ our $MaxTimeBetweenTicks = 600;
 
 # other global variables
 our $LastTime = 0;  # timestamp of last update event
+our $LastIp = undef;  # IP address that was last detected
 our $IsStopped = 0;  # flag if active timer is running or not
 
 our $TimeZone = undef;
@@ -205,6 +206,8 @@ sub get_timezone_offset
 ##############################################################################
 ### Read write configuration
 
+my $MonitorIP = 0;
+
 # This function determines the configuration file to use from the arguments
 # and environment. After determining the path, read the config file and the
 # other files that contain status info (status and storage).
@@ -250,6 +253,29 @@ sub read_all_config
 		$preset_timer->(3, "Project Meeting", qr/project/i);
 		$preset_timer->(4, "Implementation", qr/project/i);
 		$preset_timer->(5, "Writing webpage", qr/project/i);
+	}
+	$MonitorIP = 0;
+	if (get_monitor_ip)
+	{
+		eval
+		{
+			require IO::Socket::INET;
+			# Do not import to not change this namespace
+			$MonitorIP = 1;  # library available
+		};
+		if ($@)
+		{
+			info "Could not initialize IP monitoring: $@\n";
+		}
+	}
+	if ($MonitorIP)
+	{
+		$LastIp = get_timer_extra 0, "ip";
+		info "Last known IP address: '$LastIp'\n";
+	}
+	else
+	{
+		info "IP addresses are not monitored\n";
 	}
 }
 
@@ -813,6 +839,37 @@ sub time_tick
 
 		# Update time window
 		&$cb_update_wall_time($time) if $cb_update_wall_time;
+
+		if (($time % 60) == 0)
+		{
+			if ($MonitorIP)
+			{
+				# Check current IP address
+				eval
+				{
+					my $socket = IO::Socket::INET->new(
+						Proto       => 'udp',
+						PeerAddr    => '198.41.0.4', # a.root-servers.net
+						PeerPort    => '53', # DNS
+					);
+					# A side-effect of making a socket
+					# connection is that our IP address is
+					# available from the 'sockhost' method
+					my $ip = $socket->sockhost;
+
+					if ($ip ne $LastIp)
+					{
+						# IP address changed
+						set_timer_extra 0, "ip", $ip;
+						$LastIp = $ip;
+					}
+				};
+				if ($@)
+				{
+					info "Could not retrieve current IP address: $@\n";
+				}
+			}
+		}
 
 		# Update running timer
 		TimeKeeper::Storage::time_1sec;
