@@ -93,6 +93,10 @@ use TimeKeeper::Gui qw/:plugin/;
 ##############################################################################
 ### Constructors and factory methods
 
+# To find compilation errors in plugins, enable line(s) below
+#use TimeKeeper::Gui::PluginTk;
+#use TimeKeeper::Gui::PluginTkx;
+
 # Create an appropriate plugin and initialize it.
 sub create
 {
@@ -1320,10 +1324,6 @@ sub CbSetClipboard
 
 ##############################################################################
 ### Package interface
-
-# To find compilation errors in plugins, enable line(s) below
-#use TimeKeeper::Gui::PluginTk;
-#use TimeKeeper::Gui::PluginTkx;
 
 sub Init
 {
