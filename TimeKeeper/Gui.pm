@@ -896,7 +896,7 @@ sub TimerVisualNormalMode
 	my ($timer) = @_;
 
 	#info "TimerVisualNormalMode($timer)\n";
-	my $is_active = get_active == $timer;
+	my $is_active = get_active eq $timer;
 	$GuiPlugin->SetTimerNormalMode($timer, $is_active);
 	show_timer $timer;
 }
@@ -974,7 +974,7 @@ sub TimerEditMode
 	my ($timer, $mode) = @_;
 
 	#info "TimerEditMode($timer, '$mode')\n";
-	if ($timer != $TimerEdit)
+	if ($timer ne $TimerEdit)
 	{
 		TimerNormalMode;
 		TimerVisualEditMode $timer, $mode;
@@ -1188,7 +1188,7 @@ sub CbActivate
 	my ($timer) = @_;
 
 	#print "CbActivate($timer)\n";
-	$GuiPlugin->DrawTimerActive($timer, $timer == $TimerEdit);
+	$GuiPlugin->DrawTimerActive($timer, $timer eq $TimerEdit);
 
 	UpdateTitle;
 }
@@ -1198,7 +1198,7 @@ sub CbDeactivate
 	my ($timer) = @_;
 
 	#print "CbDeactivate($timer)\n";
-	$GuiPlugin->DrawTimerInactive($timer, $timer == $TimerEdit);
+	$GuiPlugin->DrawTimerInactive($timer, $timer eq $TimerEdit);
 }
 
 sub CbStart
@@ -1215,7 +1215,7 @@ sub CbUpdateTimerTime
 {
 	my ($timer, $time) = @_;
 
-	return if $timer == $TimerEdit && !$TimerEditUpdate;  # If timer is being edited, leave it alone
+	return if $timer eq $TimerEdit && !$TimerEditUpdate;  # If timer is being edited, leave it alone
 
 	my $text = format_time($time) || " ";  # space instead of empty to force update
 	#info "Set timer $timer to '$text'\n";
@@ -1228,7 +1228,7 @@ sub CbUpdateTimerDescription
 
 	#info "CbUpdateTimerDescription($timer,$description)\n";
 	$GuiPlugin->SetTimerDescription($timer, $description);
-	if ($timer == get_active)
+	if ($timer eq get_active)
 	{
 		# The active timer's description changed, update the title.
 		UpdateTitle;

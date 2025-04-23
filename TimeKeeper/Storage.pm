@@ -63,8 +63,9 @@ my $StartUpTime = get_storage_timestamp();
 # This @State array contains all the entries in the storage_file. Each entry
 # is an array with the following elements:
 # - GMT timestamp: UNIX timestamp in UTC
-# - Timer number: >=0, can be >NumTimers, so that only a subset is used and
-#   the remaining timers are left unchanged.
+# - Timer: If it is a number, it is >=0, can be >NumTimers, so that only a
+#   subset is used and the remaining timers are left unchanged.
+#   It can also be a name, but this is currently not used.
 # - Event code: T, D, G, i, r, or p
 # - Event specific arguments, which are:
 #   * T (set_time):
@@ -104,11 +105,11 @@ END
 }
 
 # Derived, 'running-total' states
-my @Descriptions;
-my @GroupNames;
-my @GroupTypes;
-my @Times;
-my @Times_running;  # Is a substate of @Times.
+my %Descriptions;
+my %GroupNames;
+my %GroupTypes;
+my %Times;
+my %Times_running;  # Is a substate of %Times.
 
 # This hash(set) contains the timerids that have been changed since it was
 # reset. All state changing functions in this module use this variable to
@@ -282,8 +283,9 @@ sub rmw_storage_file
 		# else keep current states
 	}
 	elsif (@State &&
-		!@Descriptions && !@GroupNames && !@GroupTypes &&
-		!@Times && !@Times_running)
+		!keys(%Descriptions) &&
+		!keys(%GroupNames) && !keys(%GroupTypes) &&
+		!keys(%Times) && !keys(%Times_running))
 	{
 		# The storage file does not exist, there is state and the
 		# 'running totals' are empty. This means that this is an
@@ -566,7 +568,7 @@ sub get_substate
 	my @substate = ();
 	foreach (@$state)
 	{
-		if ($$_[1] == $timer)  # if this event is for this timer ...
+		if ($$_[1] eq $timer)  # if this event is for this timer ...
 		{
 			push @substate, $_;  # ... add reference to substate
 		}
@@ -627,7 +629,7 @@ sub state_cleanup
 	my $event_keep_history_time = get_keep_event_history_days() * 24 * 60 *60;
 
 	my $new_state = [];
-	my @reset_before_window;  # timer -> data_item -> bool
+	my %reset_before_window;  # timer -> data_item -> bool
 	my $keep_window_time = get_storage_timestamp() - $event_keep_history_time;
 	info "Delete events before $keep_window_time (=" . localtime($keep_window_time) . ")...\n";
 	foreach (reverse @$state)
@@ -652,7 +654,7 @@ sub state_cleanup
 			# This event is outside of the near past window. It
 			# should only be kept if there is an absolute event
 			# resetting it before the window starts.
-			if ($reset_before_window[$timer]{$data_item})
+			if ($reset_before_window{$timer}{$data_item})
 			{
 				# This item's effect will be reset before the
 				# window starts. It can be removed.
@@ -662,7 +664,7 @@ sub state_cleanup
 			{
 				# This is an absolute event and it is before
 				# the window starts.
-				$reset_before_window[$timer]{$data_item} = 1;
+				$reset_before_window{$timer}{$data_item} = 1;
 				#info "ABSOLUTE EVENT BEFORE WINDOW: @$_\n";
 			}
 		}
@@ -700,14 +702,14 @@ sub state_pass_time
 	}
 	else
 	{
-		@timers = (0..@Times_running-1);  # all timers
+		@timers = keys %Times_running;  # all timers
 	}
 
 	foreach my $idx (@timers)
 	{
-		if ($Times_running[$idx])
+		if ($Times_running{$idx})
 		{
-			$Times[$idx] += $time;
+			$Times{$idx} += $time;
 			mark_changed_timer $idx, "T";
 		}
 	}
@@ -718,7 +720,7 @@ sub state_pass_time
 # - $last_ts is the timestamp of the last event replayed.
 # - $event is the event to replay.
 # Returns timestamp of this event.
-# Updates: @Times, @Descriptions, @Times_running, @GroupNames, @GroupTypes.
+# Updates: %Times, %Descriptions, %Times_running, %GroupNames, %GroupTypes.
 sub replay_event
 {
 	my ($last_ts, $event) = @_;
@@ -728,28 +730,28 @@ sub replay_event
 	#info "EVENT: '@$event'\n";
 	if ($code eq 'T')  # set_time
 	{
-		$Times[$timer] = $arg1;
+		$Times{$timer} = $arg1;
 	}
 	elsif ($code eq 'D')  # set_description
 	{
-		$Descriptions[$timer] = $arg1;
+		$Descriptions{$timer} = $arg1;
 	}
 	elsif ($code eq 'G')  # set_group
 	{
-		$GroupNames[$timer] = $arg1;
-		$GroupTypes[$timer] = $arg2;
+		$GroupNames{$timer} = $arg1;
+		$GroupTypes{$timer} = $arg2;
 	}
 	elsif ($code eq 'i')  # increase_time
 	{
-		$Times[$timer] += $arg1;
+		$Times{$timer} += $arg1;
 	}
 	elsif ($code eq 'r')  # run
 	{
-		$Times_running[$timer] = 1;
+		$Times_running{$timer} = 1;
 	}
 	elsif ($code eq 'p')  # pause
 	{
-		$Times_running[$timer] = 0;
+		$Times_running{$timer} = 0;
 	}
 	else
 	{
@@ -774,7 +776,7 @@ sub replay_event
 
 # Replay the state and calculate the current totals.
 # If $timer is defined, only update the current totals for that 1 timer.
-# Updates: @Times, @Descriptions, @Times_running, @GroupNames, @GroupTypes.
+# Updates: %Times, %Descriptions, %Times_running, %GroupNames, %GroupTypes.
 sub replay_state
 {
 	my ($state, $timer) = @_;
@@ -782,21 +784,21 @@ sub replay_state
 	#info "replay_state()\n";
 	if (defined $timer)
 	{
-		$Descriptions[$timer] = "";
-		$GroupNames[$timer] = "";
-		$GroupTypes[$timer] = "";
-		$Times[$timer] = 0;
-		$Times_running[$timer] = 0;
+		$Descriptions{$timer} = "";
+		$GroupNames{$timer} = "";
+		$GroupTypes{$timer} = "";
+		$Times{$timer} = 0;
+		$Times_running{$timer} = 0;
 	}
 	else
 	{
-		@Descriptions = ();
-		@GroupNames = ();
-		@GroupTypes = ();
-		@Times = ();
-		@Times_running = ();
+		%Descriptions = ();
+		%GroupNames = ();
+		%GroupTypes = ();
+		%Times = ();
+		%Times_running = ();
 	}
-	my @save_Times_running;
+	my %save_Times_running;
 	my $now = get_storage_timestamp;
 	my $last_ts = 0;
 	foreach my $event (@$state)
@@ -807,7 +809,7 @@ sub replay_state
 		{
 			# We crossed the current time. See note above on
 			# future events.
-			@save_Times_running = @Times_running;
+			%save_Times_running = %Times_running;
 		}
 
 		# Add elapsed time to the running timers
@@ -823,7 +825,7 @@ sub replay_state
 
 	# If we went into the future, restore the running state as it should
 	# be now.
-	@Times_running = @save_Times_running if @save_Times_running;
+	%Times_running = %save_Times_running if keys %save_Times_running;
 }
 
 
@@ -855,7 +857,7 @@ sub set_timer_time
 		foreach my $t (@$timers)
 		{
 			add_event $state, $ts, $t, "T", $time, create_eventid;
-			add_event $state, $ts, $t, ($Times_running[$t] ? "r" : "p");
+			add_event $state, $ts, $t, ($Times_running{$t} ? "r" : "p");
 		}
 		state_cleanup $state;
 	};
@@ -863,7 +865,7 @@ sub set_timer_time
 	# Update internal variables and UI
 	foreach my $t (@$timers)
 	{
-		$Times[$t] = $time;
+		$Times{$t} = $time;
 		mark_changed_timer $t, "T";
 	}
 }
@@ -884,7 +886,7 @@ sub set_timer_description
 	};
 
 	# Update internal variables and UI
-	$Descriptions[$timer] = $description;
+	$Descriptions{$timer} = $description;
 	mark_changed_timer $timer, "D";
 }
 
@@ -904,8 +906,8 @@ sub set_timer_group
 	};
 
 	# Update internal variables and UI
-	$GroupNames[$timer] = $group_name;
-	$GroupTypes[$timer] = $group_type;
+	$GroupNames{$timer} = $group_name;
+	$GroupTypes{$timer} = $group_type;
 	mark_changed_timer $timer, "G";
 }
 
@@ -931,10 +933,10 @@ sub inc_timer_time
 	};
 
 	# Update internal variables and UI
-	$Times[$timer] += $time;
+	$Times{$timer} += $time;
 	mark_changed_timer $timer, "T";
 
-	return $Times[$timer];
+	return $Times{$timer};
 }
 
 # Transfers time from $timer_from to $timer_to.
@@ -955,12 +957,12 @@ sub transfer_timer_time
 	};
 
 	# Update internal variables and UI
-	$Times[$timer_from] -= $time;
-	$Times[$timer_to] += $time;
+	$Times{$timer_from} -= $time;
+	$Times{$timer_to} += $time;
 	mark_changed_timer $timer_from, "T";
 	mark_changed_timer $timer_to, "T";
 
-	return ( $Times[$timer_from], $Times[$timer_to] );
+	return ( $Times{$timer_from}, $Times{$timer_to} );
 }
 
 # Mark specified timer as running.
@@ -976,10 +978,10 @@ sub timer_run
 	rmw_storage_file sub {
 		my $state = shift;
 		# Start specified timer
-		if (!$Times_running[$timer])
+		if (!$Times_running{$timer})
 		{
 			add_event $state, $ts, $timer, "r";
-			$Times_running[$timer] = 1;
+			$Times_running{$timer} = 1;
 		}
 		state_cleanup $state;
 	};
@@ -998,10 +1000,10 @@ sub timer_pause
 	rmw_storage_file sub {
 		my $state = shift;
 		# Stop specified timer
-		if ($Times_running[$timer])
+		if ($Times_running{$timer})
 		{
 			add_event $state, $ts, $timer, "p";
-			$Times_running[$timer] = 0;
+			$Times_running{$timer} = 0;
 		}
 		state_cleanup $state;
 	};
@@ -1023,12 +1025,13 @@ sub timer_pause_all
 	rmw_storage_file sub {
 		my $state = shift;
 		# Stop all running timers
-		foreach my $idx (0..@Times_running-1)
+		foreach my $idx (keys %Times_running)
 		{
-			if ($Times_running[$idx])
+			next unless $idx =~ /^\d+$/;  # only numeric timers
+			if ($Times_running{$idx})
 			{
 				add_event $state, $ts, $idx, "p";
-				$Times_running[$idx] = 0;
+				$Times_running{$idx} = 0;
 				push @timers, $idx;
 			}
 		}
@@ -1062,20 +1065,20 @@ sub timer_events
 			$ts = get_storage_timestamp unless defined $ts;
 			if ($code eq "r")
 			{
-				if (!$Times_running[$timer])
+				if (!$Times_running{$timer})
 				{
 					# Should run, but is stopped
 					add_event $state, $ts, $timer, "r";
-					$Times_running[$timer] = 1;
+					$Times_running{$timer} = 1;
 				}
 			}
 			elsif ($code eq "p")
 			{
-				if ($Times_running[$timer])
+				if ($Times_running{$timer})
 				{
 					# Should stop, but is running
 					add_event $state, $ts, $timer, "p";
-					$Times_running[$timer] = 0;
+					$Times_running{$timer} = 0;
 					push @timers, $timer;
 				}
 			}
@@ -1125,7 +1128,7 @@ sub get_timer_current_time
 {
 	my ($timer) = @_;
 
-	return $Times[$timer];
+	return $Times{$timer};
 }
 
 # Get the current description of the specified timer.
@@ -1133,7 +1136,7 @@ sub get_timer_current_description
 {
 	my ($timer) = @_;
 
-	return $Descriptions[$timer];
+	return $Descriptions{$timer};
 }
 
 # Get the current group name of the specified timer.
@@ -1141,7 +1144,7 @@ sub get_timer_current_group_name
 {
 	my ($timer) = @_;
 
-	return $GroupNames[$timer];
+	return $GroupNames{$timer};
 }
 
 # Get the current group type of the specified timer.
@@ -1149,7 +1152,7 @@ sub get_timer_current_group_type
 {
 	my ($timer) = @_;
 
-	return $GroupTypes[$timer];
+	return $GroupTypes{$timer};
 }
 
 # Go through all events and gather all groups that are in use.
@@ -1209,16 +1212,17 @@ sub get_timer_running
 {
 	my ($timer) = @_;
 
-	return $Times_running[$timer];
+	return $Times_running{$timer};
 }
 
 # Return a list with indexes of all running timers.
 sub get_all_timers_running
 {
 	my @timers = ();
-	foreach (0..@Times_running-1)
+	foreach (keys %Times_running)
 	{
-		push @timers, $_ if $Times_running[$_];
+		next unless /^\d+$/;  # only numeric timers can be running
+		push @timers, $_ if $Times_running{$_};
 	}
 	return @timers;
 }
@@ -1244,7 +1248,7 @@ sub mark_changed_timer
 sub peek_changed_timers
 {
 	my @changes = ();
-	foreach (sort { $a <=> $b } keys %ChangedTimers)
+	foreach (sort { $a cmp $b } keys %ChangedTimers)
 	{
 		my @entry = ( $_ );
 		push @entry, keys %{$ChangedTimers{$_}};
@@ -1268,7 +1272,7 @@ sub get_changed_timers
 # the following fields:
 # - start [timestamp]
 # - end [timestamp]
-# - timer id
+# - timer id (only the numeric timers)
 # Also a second array with modifications is returned. This array consists of
 # entries with any of the following formats:
 # - [ 'i', <timestamp>, <amount-seconds>, <timer id> ]: increase/decrease time
@@ -1317,11 +1321,14 @@ sub create_timeline
 		||
 		$EventTraits{$$a[2]}{sort} <=> $EventTraits{$$b[2]}{sort}  # then by event type
 		||
-		$$a[1] <=> $$b[1]  # then by timer (if necessary)
+		$$a[1] <=> $$b[1]  # then by timer numeric (if necessary)
+		||
+		$$a[1] cmp $$b[1]  # then by timer other names (if necessary)
 	} @$state;  # sort by timestamp
 	foreach (@events)
 	{
 		my ($ts, $timer, $code, $arg1) = @$_;
+		next unless $timer =~ /^\d+$/;  # only keep numeric timers
 		if ($code eq 'T')
 		{
 			# Search back in @timeline and remove all events for this timer
@@ -1384,7 +1391,7 @@ sub create_timeline
 		||
 		$$a[1] <=> $$b[1]  # then by end timestamp
 		||
-		$$a[2] <=> $$b[2];  # then by timer (to make order unique)
+		$$a[2] <=> $$b[2];  # then by timer numeric (to make order unique)
 	} @timeline;
 	#use Data::Dumper; info Dumper \@timeline, \@modifications;
 
