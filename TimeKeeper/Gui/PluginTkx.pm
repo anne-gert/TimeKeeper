@@ -25,8 +25,12 @@ sub new
 {
 	my $class = shift;
 
+	# Create the MainWin to test if this Tkx is working
+	my $mw = Tkx::widget->new(".");
+
 	my $self = $class->SUPER::new();
 	# Set values
+	$$self{MainWin} = $mw;
 	$$self{AddCancelMenuItem} = 0;
 	# Add my variables
 	my %sub = (
@@ -405,7 +409,12 @@ sub CreateMainWin
 {
 	my $self = shift;
 
-	$self->{MainWin} = my $mw = Tkx::widget->new(".");
+	my $mw = $self->GetMainWin;
+	unless ($mw)
+	{
+		# Create MainWindow if it isn't already created in new().
+		$self->{MainWin} = $mw = Tkx::widget->new(".");
+	}
 	$mw->g_wm_title("TimeKeeper");
 	$mw->g_grid_columnconfigure("0", -weight => 1);
 	$mw->g_grid_rowconfigure("1", -weight => 1);  # middle area with timers
