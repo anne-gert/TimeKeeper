@@ -10,7 +10,7 @@ use vars qw/@AltLogs $AltLogId/;  # arguments from outside
 my $AL_Timeline     = "Generate Timeline Log";
 my $AL_Timeline_csv = "Generate Timeline CSV";
 @AltLogs = ( $AL_Timeline, $AL_Timeline_csv );
-
+$AltLogId = "" unless defined $AltLogId;
 
 # Calculate global data
 my @DiscardTimers = grep is_timer_group_type($_, "-", "O"), (0..get_num_timers);
