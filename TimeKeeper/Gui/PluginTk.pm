@@ -148,17 +148,33 @@ sub SetTimerDescription
 	${$self->{Timers}[$timer]{descrtext}} = $description;
 }
 
+# Set the group of the label of the specified timer visually.
+# Sets color and tooltip text.
+sub SetTimerGroupLabelVisually
+{
+	my $self = shift;
+	my ($label, $balloon, $groupname, $groupcolor) = @_;
+
+	my ($fg, $bg) = $self->GetTimerGroupColoring($groupname, $groupcolor);
+	$label->configure(-background => $bg, -foreground => $fg);
+
+	my $tooltip = $self->GetTimerLabelTooltip($groupname);
+	$balloon->detach($label);
+	$balloon->attach($label, -msg => $tooltip);
+}
+
 # Set the group of the specified timer.
 sub SetTimerGroup
 {
 	my $self = shift;
 	my ($timer, $groupname, $groupcolor) = @_;
 
-	my ($fg, $bg) = $self->GetTimerGroupColoring($groupname, $groupcolor);
-	$groupname = "" unless defined $groupname;
+	my $groupnametext = defined $groupname ? $groupname : "";
+	${$self->{Timers}[$timer]{groupname}} = $groupnametext;
 
-	${$self->{Timers}[$timer]{groupname}} = $groupname;
-	$self->{Timers}[$timer]{labelctrl}->configure(-background => $bg, -foreground => $fg);
+	my $label = $self->{Timers}[$timer]{labelctrl};
+	my $balloon = $self->{Timers}[$timer]{labelballoonctrl};
+	$self->SetTimerGroupLabelVisually($label, $balloon, $groupname, $groupcolor);
 }
 
 # Set the time displayed in the specified timer.
@@ -613,16 +629,12 @@ sub CreateTimer
 
 	# number label
 	my $label = $frm->Label(-text => $timer_id, -width => "2", -justify => "right")->pack(-side => "left", -anchor => "e");
+	my $labelballoon = $self->GetMainWin->Balloon(-state => "balloon", -balloonposition => "mouse", -initwait => 750);
 	# Retrieve group-info of this timer and set the background color
 	my $groupname = get_timer_current_group_name $timer_id;
 	my $group = get_timer_group_info $groupname;
-	if ($group)
-	{
-		my $groupcolor = $$group{color};
-		my ($fg, $bg) = $self->GetTimerGroupColoring($groupname, $groupcolor);
-		$label->configure(-background => $bg, -foreground => $fg);
-		#info "Create Timer $timer_id with group $groupname and color $groupcolor\n";
-	}
+	my $groupcolor = $group ? $$group{color} : undef;
+	$self->SetTimerGroupLabelVisually($label, $labelballoon, $groupname, $groupcolor);
 	my $popupGroupsMenu = sub {
 		splice @_, 0, -3;  # leave all but the last 3 arguments (widget, x, y)
 		my $menu = $label->Menu(-tearoff => 0);
@@ -648,7 +660,6 @@ sub CreateTimer
 	};
 	# Add the bindings
 	$label->bind("<Button-3>", [ $popupGroupsMenu, Ev("W"), Ev("x"), Ev("y") ]);
-	$self->GetMainWin->Balloon(-state => "balloon", -balloonposition => "mouse", -initwait => 750)->attach($label, -msg => "Rightclick to change group");
 
 	# description field
 	my $text = get_timer_current_description $timer_id;
@@ -713,6 +724,7 @@ sub CreateTimer
 	# Add widgets to data structure
 	$self->{Timers}[$timer_id] = {
 		labelctrl => $label,
+		labelballoonctrl => $labelballoon,
 		groupname => \$groupname,
 		descrctrl => $descr,
 		descrtext => \$text,

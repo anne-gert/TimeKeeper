@@ -150,17 +150,31 @@ sub SetTimerDescription
 	${$self->{Timers}[$timer]{descrtext}} = $description;
 }
 
+# Set the group of the label of the specified timer visually.
+# Sets color and tooltip text.
+sub SetTimerGroupLabelVisually
+{
+	my $self = shift;
+	my ($label, $groupname, $groupcolor) = @_;
+
+	my ($fg, $bg) = $self->GetTimerGroupColoring($groupname, $groupcolor);
+	$label->configure(-background => $bg, -foreground => $fg);
+
+	my $tooltip = $self->GetTimerLabelTooltip($groupname);
+	$label->g_tooltip__tooltip($tooltip);
+}
+
 # Set the group of the specified timer.
 sub SetTimerGroup
 {
 	my $self = shift;
 	my ($timer, $groupname, $groupcolor) = @_;
 
-	my ($fg, $bg) = $self->GetTimerGroupColoring($groupname, $groupcolor);
-	$groupname = "" unless defined $groupname;
+	my $groupnametext = defined $groupname ? $groupname : "";
+	${$self->{Timers}[$timer]{groupname}} = $groupnametext;
 
-	${$self->{Timers}[$timer]{groupname}} = $groupname;
-	$self->{Timers}[$timer]{labelctrl}->configure(-background => $bg, -foreground => $fg);
+	my $label = $self->{Timers}[$timer]{labelctrl};
+	$self->SetTimerGroupLabelVisually($label, $groupname, $groupcolor);
 }
 
 # Set the time displayed in the specified timer.
@@ -671,13 +685,8 @@ sub CreateTimer
 	# Retrieve group-info of this timer and set the background color
 	my $groupname = get_timer_current_group_name $timer_id;
 	my $group = get_timer_group_info $groupname;
-	if ($group)
-	{
-		my $groupcolor = $$group{color};
-		my ($fg, $bg) = $self->GetTimerGroupColoring($groupname, $groupcolor);
-		$label->configure(-background => $bg, -foreground => $fg);
-		#info "Create Timer $timer_id with group $groupname and color $groupcolor\n";
-	}
+	my $groupcolor = $group ? $$group{color} : undef;
+	$self->SetTimerGroupLabelVisually($label, $groupname, $groupcolor);
 	my $popupGroupsMenu = sub {
 		my $menu = $label->new_menu(-tearoff => 0);
 		$menu->add_radiobutton(-label => "<None>", -variable => \$groupname, -value => "", -command => [ \&EvtSetTimerGroup, $timer_id, "" ]);
@@ -702,7 +711,6 @@ sub CreateTimer
 	};
 	# Add the bindings
 	$label->g_bind("<Button-3>", [ $popupGroupsMenu, Tkx::Ev("%W %x %y") ]);
-	$label->g_tooltip__tooltip("Rightclick to change group");
 
 	# description field
 	my $text = get_timer_current_description $timer_id;

@@ -676,6 +676,24 @@ sub GetRgb
 	return @color;
 }
 
+# Returns the tooltip text to use for the colored Timer label.
+sub GetTimerLabelTooltip
+{
+	my $self = shift;
+	my ($groupname) = @_;
+
+	my $tooltip;
+	if ($groupname eq "")
+	{
+		$tooltip = "Rightclick to change group";
+	}
+	else
+	{
+		$tooltip = "$groupname\nRightclick to change";
+	}
+	return $tooltip;
+}
+
 
 ##############################################################################
 ### Create window
