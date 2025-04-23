@@ -9,8 +9,8 @@ package TimeKeeper::Config;
 use strict;
 use Carp;
 
-use File::Spec::Functions qw/rel2abs catfile/;
-
+use File::Spec::Functions qw//;  # use rel2abs, but override it
+sub rel2abs;
 use TimeKeeper::Utils;
 
 BEGIN
@@ -121,6 +121,16 @@ my $Status_changed = 0;
 
 ##############################################################################
 ### Read/write functions
+
+# The standard rel2abs() accepts an undef name as an empty string. Here, I
+# want an undef name to result in an undef path.
+sub rel2abs
+{
+	my ($name, $base) = @_;
+	
+	return undef unless defined $name;
+	return File::Spec::Functions::rel2abs @_;  # the original
+}
 
 sub set_config_path
 {
