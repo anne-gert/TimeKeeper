@@ -542,28 +542,44 @@ sub get_timer_group_infos
 	if ($mtime > $_timer_groups_mtime)
 	{
 		# File has changed, re-read it
-		my $groups1 = read_timer_groups;
-		my $groups2 = get_used_timer_groups;
+		my $defined_groups = read_timer_groups;
+		my $used_groups = get_used_timer_groups;
+		$_timer_groups_mtime = $mtime;
 		# Store in cache variables and remember which group have changed
 		my $old_timer_groups_by_name = $_timer_groups_by_name;
-		my %changed_groups = ();
 		$_timer_groups = [];
-		$_timer_groups_mtime = $mtime;
 		$_timer_groups_by_name = {};
-		foreach my $group (@$groups1, @$groups2)
+		# Combine the defined and used groups:
+		# 1. Prefer definitions over uses, because definitions have color.
+		# 2. Uses that are not also definitions are called extras.
+		# 3. Put extras at the top of the list, so that they are visible
+		#    without scrolling in the use case of reassigning them.
+		foreach my $group (@$defined_groups)
 		{
-			# Iterate through all the groups that are defined
-			# and/or used.
-			# NB: All groups that are displayed in the timers are
-			# used groups and are thus included in this iteration.
-			# NB: Iterate defined groups first, so that those
-			# types will override the used ones.
 			my $name = $$group{name};
 			next if exists $$_timer_groups_by_name{$name};  # already seen def
 
 			push @$_timer_groups, $group;
 			$$_timer_groups_by_name{$name} = $group;
+		}
+		my $insert_index = 0;  # 0==at start; @$_timer_groups==at end;
+		                       #   calculate other index if desired
+		foreach my $group (@$used_groups)
+		{
+			my $name = $$group{name};
+			next if exists $$_timer_groups_by_name{$name};  # already seen def
 
+			# Put this extra group right after the previous extra group
+			# Alternatively, we could calculate a similarity with the
+			# defined groups and insert it near a similar one.
+			splice @$_timer_groups, $insert_index++, 0, $group;
+			$$_timer_groups_by_name{$name} = $group;
+		}
+		# Go through the combined groups and find which ones are changed
+		my %changed_groups = ();
+		foreach my $group (@$_timer_groups)
+		{
+			my $name = $$group{name};
 			# Check if this is the first read
 			if (!defined $old_timer_groups_by_name)
 			{
