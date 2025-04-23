@@ -28,7 +28,8 @@ BEGIN
 	@ISA         = qw(Exporter);
 	@EXPORT      = (
 		# Absolute state setting functions
-		qw/set_timer_time set_timer_description set_timer_group/,
+		qw/set_timer_time set_timer_description set_timer_group
+		set_timer_extra/,
 		# Relative state modifying functions
 		qw/inc_timer_time transfer_timer_time
 		timer_run timer_pause timer_pause_all timer_events/,
@@ -37,6 +38,7 @@ BEGIN
 		qw/get_timer_current_time
 		get_timer_current_description
 		get_timer_current_group_name get_timer_current_group_type get_used_timer_groups
+		get_timer_extra
 		get_timer_running get_all_timers_running
 		get_changed_timers peek_changed_timers mark_changed_timer/,
 
@@ -65,7 +67,9 @@ my $StartUpTime = get_storage_timestamp();
 # - GMT timestamp: UNIX timestamp in UTC
 # - Timer: If it is a number, it is >=0, can be >NumTimers, so that only a
 #   subset is used and the remaining timers are left unchanged.
-#   It can also be a name, but this is currently not used.
+#   It can also be a name, in which case it is a special object with a value
+#   (that is stored with the E event code). In this case it does not time time,
+#   but another value.
 # - Event code: T, D, G, i, r, or p
 # - Event specific arguments, which are:
 #   * T (set_time):
@@ -79,6 +83,9 @@ my $StartUpTime = get_storage_timestamp();
 #     - group type: string that specifies the type of this group (the meaning
 #         of this field is up to the log definition where it is used)
 #     - eventid: random id to identify absolute events when merging
+#   * E (extra_info):
+#     - info name
+#     - info value
 #   * i (increase_time):
 #     - time: time to increase the timer value with (integer, in seconds)
 #   * r (run):
@@ -110,6 +117,7 @@ my %GroupNames;
 my %GroupTypes;
 my %Times;
 my %Times_running;  # Is a substate of %Times.
+my %ExtraInfo;
 
 # This hash(set) contains the timerids that have been changed since it was
 # reset. All state changing functions in this module use this variable to
@@ -138,6 +146,7 @@ my %EventTraits = (
 	p => create_event_trait(0, "t", 4),
 	r => create_event_trait(0, "t", 5),
 	i => create_event_trait(0, "t", 6),
+	E => create_event_trait(0, "e", 7),
 );
 
 sub create_event_trait {
@@ -285,7 +294,8 @@ sub rmw_storage_file
 	elsif (@State &&
 		!keys(%Descriptions) &&
 		!keys(%GroupNames) && !keys(%GroupTypes) &&
-		!keys(%Times) && !keys(%Times_running))
+		!keys(%Times) && !keys(%Times_running) &&
+		!keys(%ExtraInfo))
 	{
 		# The storage file does not exist, there is state and the
 		# 'running totals' are empty. This means that this is an
@@ -536,6 +546,7 @@ sub add_event
 	# arguments are left in @_
 
 	info "add_event($ts,$timer,$code,@_)\n";
+	#use Carp; Carp::cluck "Dump call stack";
 	my $event = [ $ts, $timer, $code, @_ ];
 	# Find the index before which to insert the new event
 	my $idx = @$state;
@@ -720,7 +731,7 @@ sub state_pass_time
 # - $last_ts is the timestamp of the last event replayed.
 # - $event is the event to replay.
 # Returns timestamp of this event.
-# Updates: %Times, %Descriptions, %Times_running, %GroupNames, %GroupTypes.
+# Updates: %Times, %Descriptions, %Times_running, %GroupNames, %GroupTypes, %ExtraInfo.
 sub replay_event
 {
 	my ($last_ts, $event) = @_;
@@ -740,6 +751,10 @@ sub replay_event
 	{
 		$GroupNames{$timer} = $arg1;
 		$GroupTypes{$timer} = $arg2;
+	}
+	elsif ($code eq 'E')  # extra info
+	{
+		_add_to_extra_info($timer, $ts, $arg1, $arg2);
 	}
 	elsif ($code eq 'i')  # increase_time
 	{
@@ -776,7 +791,7 @@ sub replay_event
 
 # Replay the state and calculate the current totals.
 # If $timer is defined, only update the current totals for that 1 timer.
-# Updates: %Times, %Descriptions, %Times_running, %GroupNames, %GroupTypes.
+# Updates: %Times, %Descriptions, %Times_running, %GroupNames, %GroupTypes, %ExtraInfo.
 sub replay_state
 {
 	my ($state, $timer) = @_;
@@ -789,6 +804,7 @@ sub replay_state
 		$GroupTypes{$timer} = "";
 		$Times{$timer} = 0;
 		$Times_running{$timer} = 0;
+		$ExtraInfo{$timer} = {};
 	}
 	else
 	{
@@ -797,6 +813,7 @@ sub replay_state
 		%GroupTypes = ();
 		%Times = ();
 		%Times_running = ();
+		%ExtraInfo = ();
 	}
 	my %save_Times_running;
 	my $now = get_storage_timestamp;
@@ -909,6 +926,45 @@ sub set_timer_group
 	$GroupNames{$timer} = $group_name;
 	$GroupTypes{$timer} = $group_type;
 	mark_changed_timer $timer, "G";
+}
+
+sub _add_to_extra_info
+{
+	my ($timer, $timestamp, $extra_info_name, $extra_info_value) = @_;
+
+	# Add new entry
+	my $entries = $ExtraInfo{$timer}{$extra_info_name} ||= {};
+	my $events = $$entries{events} ||= {};
+	$$events{$timestamp} = $extra_info_value;
+	# Create sorted cache with unique entries
+	my @sorted;
+	while (my ($ts, $val) = each %$events)
+	{
+		push @sorted, [ $ts, $val ];
+	}
+	@sorted = sort { $$a[0] <=> $$b[0] } @sorted;
+	# Set this as sorted cache
+	$$entries{sorted} = \@sorted;
+}
+
+# Set the extra info for the specified timer.
+sub set_timer_extra
+{
+	my ($timer, $extra_info_name, $extra_info_value, $ts) = @_;
+
+	#info "set_timer_extera($timer, $extra_info, $ts)\n";
+	$ts = get_storage_timestamp unless defined $ts;
+
+	# Add events to the Storage file
+	my @timers = ();
+	rmw_storage_file sub {
+		my $state = shift;
+		add_event $state, $ts, $timer, "E", $extra_info_name, $extra_info_value;
+		state_cleanup $state;
+	};
+
+	# Update internal variables
+	_add_to_extra_info $timer, $ts, $extra_info_name, $extra_info_value;
 }
 
 
@@ -1207,6 +1263,59 @@ sub get_used_timer_groups
 	return \@groups;
 }
 
+# Get all extra-info values in the specified timestamp range.
+# $from_ts and $to_ts default to the current timestamp.
+sub get_timer_extra
+{
+	my ($timer, $extra_info_name, $from_ts, $to_ts) = @_;
+
+	unless (defined $from_ts && defined $to_ts)
+	{
+		my $ts = get_storage_timestamp;
+		$from_ts = $ts unless defined $from_ts;
+		$to_ts = $ts unless defined $to_ts;
+	}
+
+	# Collect all the changes in this window plus the one before.
+	my @values;
+	foreach my $entry (@{$ExtraInfo{$timer}{$extra_info_name}{sorted}})
+	{
+		#info "ExtraInfo entry '$extra_info_name': '@$entry'\n";
+		my ($ts, $val) = @$entry;
+		if ($ts <= $from_ts)
+		{
+			# This entry is before the window, remember the last
+			#info "->before ($ts<=$from_ts)\n";
+			$values[0] = $val;
+		}
+		elsif ($ts <= $to_ts)
+		{
+			# This entry is inside the window
+			#info "->between ($from_ts<$ts<=$to_ts)\n";
+			push @values, $val;
+		}
+		else
+		{
+			# This entry is after the window
+			#info "->after ($ts>$to_ts)\n";
+			last;
+		}
+	}
+
+	if (wantarray)
+	{
+		return @values;  # return all
+	}
+	elsif (@values > 0)
+	{
+		return $values[-1];  # return last
+	}
+	else
+	{
+		return undef;  # none to return
+	}
+}
+
 # Get the current running status of the specified timer.
 sub get_timer_running
 {
@@ -1348,6 +1457,10 @@ sub create_timeline
 		elsif ($code eq 'G')
 		{
 			# Ignore group events in the timeline
+		}
+		elsif ($code eq 'E')
+		{
+			# Ignore extra-info events in the timeline
 		}
 		elsif ($code eq 'i')
 		{
