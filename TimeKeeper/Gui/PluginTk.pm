@@ -23,8 +23,12 @@ sub new
 {
 	my $class = shift;
 
+	# Create the MainWin to test if this Tk is working
+	my $mw = MainWindow->new;
+
 	my $self = $class->SUPER::new();
 	# Set values
+	$$self{MainWin} = $mw;
 	$$self{AddCancelMenuItem} = 1;
 	# Add my variables
 	my %sub = (
@@ -356,7 +360,13 @@ sub CreateMainWin
 {
 	my $self = shift;
 
-	$self->{MainWin} = my $mw = new MainWindow(-title => "TimeKeeper");
+	my $mw = $self->GetMainWin;
+	unless ($mw)
+	{
+		# Create MainWindow if it isn't already created in new().
+		$self->{MainWin} = $mw = new MainWindow;
+	}
+	$mw->title("TimeKeeper");
 	TimeKeeper::ImgUtils::set_rgb_function sub { return $self->GetRgbRaw($_[0]) };
 
 	$self->{ColorReadOnly} = $self->{ColorWindowBackground} = $mw->cget("-background");
