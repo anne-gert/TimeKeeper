@@ -861,16 +861,18 @@ sub call_format_timeline_event
 	my $duration = format_time_hm($end_ts - $start_ts);
 	$duration = "-" unless $duration;
 	my $start_datetime = format_datetime_hm($start_ts);
-	my $end_datetime = format_datetime_hm($end_ts, 1);
+	my $end_datetime24 = format_datetime_hm($end_ts, 1);
 
 	# Assume the start and end will generally be on the same date.
 	# If so, display it a bit more concise.
 	my ($start_date, $start_time) = $start_datetime =~ /(\S+)\s+(\S+)/;
-	my ($end_date, $end_time) = $end_datetime =~ /(\S+)\s+(\S+)/;
+	my ($end_date24, $end_time24) = $end_datetime24 =~ /(\S+)\s+(\S+)/;
 
 	if (!$event && $description eq "")
 	{
 		# This is a gap and there is no description yet.
+		my $end_datetime = format_datetime_hm($end_ts);
+		my ($end_date, undef) = $end_datetime =~ /(\S+)\s+(\S+)/;
 		if ($start_date ne $end_date)
 		{
 			$description = "<next day>";
@@ -883,7 +885,7 @@ sub call_format_timeline_event
 
 	my $s = &$func($event,
 		$start_ts, $start_datetime, $start_date, $start_time,
-		$end_ts, $end_datetime, $end_date, $end_time,
+		$end_ts, $end_datetime24, $end_date24, $end_time24,
 		$duration, $description);
 	$s .= "\n" if $s ne "";  # add linebreak if not empty
 	return $s;
