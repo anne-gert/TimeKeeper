@@ -146,7 +146,7 @@ my %EventTraits = (
 	p => create_event_trait(0, "t", 4),
 	r => create_event_trait(0, "t", 5),
 	i => create_event_trait(0, "t", 6),
-	E => create_event_trait(0, "e", 7),
+	E => create_event_trait(1, "e", 7),
 );
 
 sub create_event_trait {
